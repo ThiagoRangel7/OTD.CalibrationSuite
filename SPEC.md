@@ -1,779 +1,345 @@
-# Calibration Suite - Specification (OpenTabletDriver Plugin, PreTransform)
+# Calibration Suite - Specification (OTD 0.6.7, PreTransform)
 
-This document specifies **Calibration Suite**, an OpenTabletDriver (OTD) plugin for **precision-first calibration of display tablets**. It calibrates both **position** and **tilt**, then applies those calibration results in real time via a lightweight filter.
+Calibration Suite interpolates one error field from measured screen positions and pen orientations to correct display-tablet pointer errors. No separate position/tilt stages, fitted coefficients, or global solver.
 
-Calibration Suite has two parts that must work together:
+## 1. Components and OTD integration
 
-- **Calibrator**: the calibration component that runs the workflow (sampling, gating, solving) and owns the full-screen WPF **Calibration Window**.
-- **Correction Filter**: an OTD pipeline element (**Filter plugin**) that runs on every pen report and applies only the real-time correction math.
+- **Calibrator:** separately launched Windows WPF app for guidance, raw-report capture, session review, and copying calibration data.
+- **Correction Filter:** normal OTD plugin package running in-process at `PipelinePosition.PreTransform`; changes only pen position, preserving report types, other fields, and event order.
+- **Shared core:** data validation, capture calculations, mesh construction, and correction evaluation for both components. The filter and automated tests use the same evaluator; keep WPF and RPC outside the core.
 
-Terminology is intentionally strict to avoid ambiguity:
+### Ownership and standard workflows
 
-- **Correction Filter** = OTD *Filter plugin* that transforms pen reports in real time.
-- **Calibrator** = calibration component (workflow + sampling + solve + calibration JSON generation).
-- **Calibration Window** = full-screen WPF window shown during calibration.
-- **External calibrator app** = a separate process that hosts the Calibrator.
+OTD owns driver configuration and persistence; the Calibrator owns measurement and review. Reuse existing OTD UI/public APIs; add only calibration-specific behavior. Workflow: configure OTD, capture/review in the Calibrator, copy the result, paste into the filter's standard property editor, and Save in OTD. Users never author JSON or edit configuration files.
 
----
+| Responsibility                                                   | Existing workflow to use                                                                             |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Install/update/remove the filter                                 | OTD Plugin Manager and its supported plugin package workflow                                         |
+| Select output mode, tablet/display areas, clipping, and bindings | OTD's existing profile and area controls                                                             |
+| Enable/disable filters and edit calibration data                 | OTD Filters UI and its generated property controls                                                   |
+| Apply and persist calibration                                    | OTD Apply/Save, together with the rest of the selected settings                                      |
+| Back up, restore, or manually switch calibrations                | OTD settings Open/Save as and presets; these include the embedded filter property and other settings |
+| Reset this calibration                                           | Clear its property in OTD and Save; disable its checkbox for a temporary bypass                      |
+| Discover tablets, obtain settings, and acquire parsed reports    | Existing daemon RPC contracts and report types                                                       |
+| Investigate plugin/runtime failures                              | OTD logs and existing diagnostics UI/export                                                          |
+| Guide measurements and review captures                    | Calibration-specific UI and shared core                                                              |
 
-## 1. Overview
+Do not add a plugin installer, settings editor, preset manager, calibration-file library, synchronization service, custom IPC server, or OTD fork. OTD 0.6.7's generated property editor supports ordinary values, including strings, but no supported wizard/button hook to host or launch the Calibrator; `ActionAttribute` is unimplemented. Property setters must not access files, launch processes, or show UI. Using OTD desktop APIs does not require embedding Eto in WPF.
 
-Calibration Suite performs two end-to-end processes:
+**Raw** means OTD-parsed values before filters/transforms, not HID bytes. Positions, targets, and errors use raw digitizer units; orientation uses `ITiltReport.Tilt.X/Y` (`TiltX/TiltY` below). Pixels are UI-only. Reuse OTD parsers, including device-specific tilt decoding/inversions.
 
-**Position Calibration**  
-Capture an $R\times C$ grid of position error across the tablet surface, then apply an interpolated correction field at runtime.
+### Acquisition
 
-**Tilt Calibration**  
-Using the current working position stage as the baseline, capture tilt errors for a set of tilt poses at each node, solve per-node tilt coefficients, then apply interpolated tilt correction at runtime.
+Use `OpenTabletDriver.Desktop.RPC.RpcClient<IDriverDaemon>` on the `OpenTabletDriver.Daemon` pipe. Initialize as OTD does: call `GetApplicationInfo()`, set `AppInfo.Current`, and initialize/load `DesktopPluginManager` for that installation so `DebugReportData.ToObject()` resolves built-in/installed report types. Use compatible OTD 0.6.7 assemblies (the source tree targets .NET 8). Do not duplicate the plugin loader, report DTO hierarchy, or settings serializer. Diagnose unknown/unloadable report types; never guess them.
 
-Every pen report must be corrected in this order:
+Subscribe directly to `DeviceReport`; enqueue reports for a serialized background consumer and send only display updates to WPF. This small adapter adds capture timing/queue bounds absent from the debugger UI. Avoid the UX `DaemonRpcClient` wrapper: it dispatches every report to Eto's UI thread.
 
-1. Position correction (interpolated grid error field)
-2. Tilt correction (interpolated coefficients)
-3. Output corrected position
+`SetTabletDebug(true)` makes `DeviceReader` reparse bytes into debug clones. `DebugReportData` contains `Tablet`, report-type `Path`, and serialized `Data`, with no hardware timestamp/sequence number. Use OTD reports, never OS cursor readings or another HID parser.
 
-The two stages are independent in data layout but always present at runtime. Calibration Suite therefore works with one complete calibration data object that contains both a position section and a tilt section. When a section has not yet been calibrated, its stored values are zero, so that section becomes a no-op.
+Select via `GetTablets()`; match event `TabletReference` contents to the selection, not RPC object identity. Resolve the profile from returned settings using OTD's profile model. If payloads cannot distinguish devices, require only the intended device connected; they do not guarantee physical-unit identity.
 
-This gives four practical states without changing the runtime data model:
+Snapshot relevant applied settings and display geometry per session. Handle disconnects, `TabletsChanged`, and `Resynchronize`; poll `GetSettings()` periodically during capture and before starting and accepting each burst. Successful `SetSettings()` does not emit `Resynchronize` in 0.6.7. Cancel on observed selection, relevant settings, mapping, or display-geometry changes. Polling is best-effort, not an atomic lock: tell users to finish or cancel capture before changing OTD settings. Add no daemon patch or notification protocol.
 
-- default position + default tilt
-- calibrated position + default tilt
-- default position + calibrated tilt
-- calibrated position + calibrated tilt
+Debug enablement is daemon-global, without a state query/ownership token. Enable only for capture; disable on normal completion/cancellation and unsubscribe on disconnect. Concurrent OTD tablet-debugger use is unsupported; never promise to restore another client's state. Bound queues; cancel on overflow/stalls.
 
-Completing Position Calibration updates the current working calibration immediately. The position section is replaced with the newly computed values, and the tilt section is reset to zero so that no previous tilt stage remains associated with the new position stage. If the user later chooses to run Tilt Calibration, the new tilt stage is computed on top of that updated position stage.
+### Mapping and pipeline
 
-### PreTransform-first design
+Preflight requires `AbsoluteOutputMode`, full centered tablet input, zero input rotation, and output bounds matching the intended tablet display. Users configure OTD's area controls; never silently replace their mapping. Other mappings remain available afterward.
 
-This specification uses **pre-transform coordinates** (raw tablet units) as the authoritative space for both calibration data and runtime correction. The Correction Filter runs at `PipelinePosition.PreTransform` and modifies `ITabletReport.Position` before OTD applies the output-mode transform (tablet → screen).
+Directly construct `OpenTabletDriver.Desktop.Output.AbsoluteMode`; set `Tablet`, `Input`, and `Output` from the selected tablet and applied profile. Use it only to read its public `TransformationMatrix`: its pointer remains uninjected. Never call report/output methods or construct it via the plugin service manager. The matrix supplies OTD's raw-to-mm scale, input-center translation, negative input rotation, input/output scale, and output-center translation. Add no custom output mode, protected-method adapter, or copied transform formula.
 
-The position stage always computes a corrected position $p_1$ from the raw position $p_0$. The tilt stage always computes a final corrected position $p_2$ from $p_1$. When either stage is still in its default all-zero state, that stage produces zero correction and therefore becomes a no-op.
+Use OTD's `DesktopInterop.VirtualScreen` / `IVirtualScreen.Displays` for geometry; exclude the virtual-screen entry from physical-display selection. One small platform/UI adapter converts OTD virtual-desktop pixels to Windows screen coordinates, then WPF window-local device-independent units, explicitly accounting for desktop origin and monitor DPI. Matrix output is not automatically a WPF screen coordinate. Windows/WPF display-change notifications must restart the session with refreshed geometry; OTD's cached list is not a live notification service. Do not duplicate its display-area editor or pointer injection.
 
-The Calibration Window is still drawn in pixels on a display because the user must see targets and pose guidance. Pixels are **UI-only**. Samples, calibration data, and runtime correction are all defined in pre-transform digitizer units.
+Calibration Suite requires unmodified parsed position/tilt, but may follow PreTransform filters that preserve both; it need not be first or the only enabled filter. Position/tilt modifiers must execute afterward. OTD preserves stored order within stages; PostTransform runs after Calibration Suite and OTD's transform.
 
----
+OTD 0.6.7's Filters UI sorts types by name and has no reorder control; toggling enablement does not reorder entries. Determine compatibility from applied stored order and known stages/behavior. Unknown behavior means unverified compatibility. Never infer execution order from the list, tell users to drag filters, rewrite `Filters`, or add an ordering workflow. For an enabled earlier PreTransform position/tilt modifier, ask the user to disable only that conflicting filter via its normal checkbox.
 
-## 2. Components
+Retain OTD's binding stage, transforms, clipping/limiting, bindings, and pointer injection. Capture uses raw debug reports and works with Calibration Suite absent or disabled. For manual end-to-end checks, temporarily disable other position-changing filters through OTD to isolate this correction, then restore them afterward.
 
-The Calibrator is responsible for:
+### Profiles and initialization
 
-- showing the main screen and the Calibration Window
-- guiding the user through nodes and poses
-- collecting samples at high frequency using raw tablet reports
-- validating captures with gates and improving robustness via burst + median
-- solving tilt coefficients once per calibration
-- maintaining the current **working calibration**
-- producing finalized calibration JSON
+Expose `CalibrationJson` with `[Property("Calibration data")]`, an empty-string default, and a paste/Save/clear-to-reset tooltip. OTD generates a text box and stores the string in the selected profile's `Filters` entry. No file-path property, custom property type/editor, or per-sample properties. The Calibrator copies JSON as an internal payload.
 
-The Correction Filter is responsible for:
+OTD matches `Profile.Tablet` to `TabletReference.Properties.Name` and constructs filters from that profile. Reuse this for different configuration names; add no device registry, automatic switcher, or per-device files. Same-name tablets share a profile, with no automatic per-unit/per-pen switching. Display the selected profile prominently; use OTD settings/presets for manual switching. Require no serial numbers or duplicated model names in JSON.
 
-- loading persisted calibration JSON from OTD settings
-- applying it per report with minimal overhead
-- treating zero/default data as identity correction
+Implement `IPositionedPipelineElement<IDeviceReport>` with a public parameterless constructor, plugin name, `Position`, `Consume`, and `Emit`. Obtain geometry via `[TabletReference]`; prepare caches in `[OnDependencyLoad]` after settings/tablet injection, never in the JSON setter. Settings activation creates a new filter; add no file watcher or hot-reload mechanism. Runtime requires exactly one enabled Calibration Suite entry in the selected profile. Diagnose missing, disabled, duplicate, or invalid entries; absence/disablement must not prevent calibration generation.
 
-### Hosting model
+## 2. Measurements, layout, and orientation
 
-The Calibrator is hosted as an **external WPF calibrator app** (separate process). The Correction Filter remains an in-process OTD Filter plugin element inside the daemon pipeline.
+At target `T`, store accepted burst medians: raw position `p` and tilt `t`. Derive `error = p - T`; each node maps measured tilt to measured position error. Individual reports need not persist.
 
-The Calibrator communicates with OTD through the daemon RPC surface and the tablet debug stream. The final calibration JSON is copied by the user into the Calibration Suite plugin settings in OTD. OTD remains the owner of normal settings persistence.
+Requested poses guide capture/acceptance only: requested `(20, 0)` captured at `(19, 2)` stays at `(19, 2)` with its measured position/error. Upright is an ordinary measured vertex near `(0, 0)`, never forced to zero.
 
-### Why the Calibrator must sample raw reports
+### Settings
 
-OTD’s daemon debug stream provides clones of **raw device reports**. Therefore:
+| Setting                 | Meaning                                                         | Default    |
+| ----------------------- | --------------------------------------------------------------- | ---------- |
+| RowCount / ColumnCount  | Screen-grid rows / columns                                      | 3 / 3      |
+| GridInsetMm             | Distance from active digitizer edges, not bezel or fixed pixels | 15 mm      |
+| AzimuthCount            | Equally spaced directions                                       | 8          |
+| NonUprightAltitudeCount | Non-upright levels                                              | 2          |
+| MinAltitudeDeg          | Minimum altitude above the tablet plane                         | 50 degrees |
+| AngleToleranceDeg       | Pose tolerance                                                  | 3 degrees  |
+| CaptureWindowMs         | Minimum burst duration                                          | 250 ms     |
+| MinSamplesPerCapture    | Minimum eligible reports                                        | 20         |
+| PositionStabilityMm     | Maximum 95th-percentile distance from median position           | 0.25 mm    |
+| TiltStabilityDeg        | Maximum 95th-percentile distance from median raw tilt           | 2 degrees  |
+| ReportGapTimeoutMs      | Maximum gap without an eligible report                          | 500 ms     |
+| CaptureTimeoutMs        | Maximum attempt duration                                        | 2000 ms    |
 
-- the Calibrator samples **raw** positions and tilt inputs
-- the Correction Filter applies corrections in **raw** (PreTransform)
-- screen pixels are used only for rendering the UI
+Sampling/stability defaults are adjustable advanced settings requiring device validation, not universal noise/report-rate guarantees. Use the UI label **Minimum altitude**: 50 degrees permits at most 40 degrees lean from upright. Default altitudes: 90, 70, 50 degrees. Initially keep these Calibrator controls in session state; add no runtime properties, OTD profile, or settings persistence layer.
 
-### Working calibration
-
-The Calibrator always operates on one complete **working calibration** in memory.
-
-At startup, the Calibrator loads the current Calibration Suite calibration JSON from OTD settings. If no calibration JSON exists yet, or if it is empty, the Calibrator constructs full default calibration data with zero position offsets and zero tilt coefficients.
-
-Every calibration action updates this working calibration:
-
-- **Calibrate Position** replaces the position section and resets the tilt section to zero
-- **Calibrate Tilt** replaces only the tilt section and preserves the current position section
-
-The user may therefore calibrate position, return to the main screen, then calibrate tilt later in the same session without first persisting the intermediate JSON to OTD.
-
----
-
-## 3. Glossary
-
-The terms below are used consistently throughout this document. They are defined here once so later sections can stay concise.
-
-**Working calibration**: the complete calibration data object currently held by the Calibrator in memory. It always contains both a position section and a tilt section, and it is updated immediately when a calibration step completes successfully.
-
-**Calibration JSON**: the JSON representation of the current calibration data. It is copied into OTD settings and then consumed by the Correction Filter at runtime.
-
-**Default section**: a position or tilt section whose stored values are all zero. At runtime, a default section behaves as a no-op.
-
-**$p_0, p_1, p_2$**: pointer positions at successive runtime stages, in **pre-transform (raw)** units. $p_0$ is raw (no correction), $p_1$ is after the position correction stage, and $p_2$ is after both position and tilt correction.
-
-**Position stage**: the runtime stage that subtracts interpolated position error from $p_0$ to produce $p_1$.
-
-**Tilt stage**: the runtime stage that subtracts predicted tilt error from $p_1$ to produce $p_2$.
-
-**Origin Point ($T_i$)**: the target position currently shown by the Calibrator for the active node (the point the user aims at). In formulas the same concept is written as $T_i$.
-
-**Node**: one point in the $R\times C$ grid across the tablet surface. Each node stores one position error vector $e_{\mathrm{pos},r,c}$ and one set of tilt coefficients $(K_{x2},K_{y2},K_x,K_y,K_{xy})$.
-
-**Position error ($e_{\mathrm{pos}}$)**: the measured position error at a node during Position Calibration:
-
-$$
-e_{\mathrm{pos}} = p_0 - T_i
-$$
-
-Runtime subtracts an interpolated position error field to produce $p_1$.
-
-**Tilt error ($e_{\mathrm{tilt}}$)**: the measured error used for Tilt Calibration:
-
-$$
-e_{\mathrm{tilt}} = p_1 - T_i
-$$
-
-This is the error observed at the node target after the position correction stage has already been accounted for, and is the quantity the tilt model learns to predict.
-
-**Predicted tilt error ($\hat e_{\mathrm{tilt}}$)**: the tilt model's predicted tilt error from raw tilt inputs (and coefficients interpolated at the current position). Runtime subtracts it from $p_1$ to produce $p_2$.
-
-**Pose**: a target pen orientation used during Tilt Calibration, defined by a pair of angles $(\mathrm{Azimuth}, \mathrm{Altitude})$.
-
-**Azimuth**: angle (in the screen plane) of the pen axis vector (tip→top) projected onto the screen; $0^\circ$ points to $+X$ (right), and angles increase clockwise (toward $+Y$ down).
-
-**Altitude**: angle from the screen plane toward vertical. $90^\circ$ is vertical; smaller means more tilt.
-
-**Capture**: one user-triggered acquisition (via `Space`) that validates pose (gate), collects a burst of raw reports, and stores medians.
-
-**Gate**: a boolean predicate on pose that must remain true during a capture. If it fails during capture, the capture is discarded and must be retried.
-
-**Sample**: a single raw device report reading (position/tilt) taken from the same report stream used by the Correction Filter.
-
-### Derived tilt angles
-
-The raw tilt inputs used by Calibration Suite are $\mathrm{TiltX}$ and $\mathrm{TiltY}$ in degrees. The Calibrator derives azimuth and altitude from those values for display, gating, and tilt-pose guidance.
-
-Let
-
-$$
-t_x^{(r)} = \mathrm{TiltX}\cdot\frac{\pi}{180}, \qquad
-t_y^{(r)} = \mathrm{TiltY}\cdot\frac{\pi}{180}
-$$
-
-where the superscript $(r)$ denotes radians.
-
-#### Azimuth
-
-Azimuth is computed from the tangent of the two tilt axes:
-
-$$
-\mathrm{Azimuth} =
-\operatorname{atan2}\!\bigl(\tan(t_y^{(r)}), \tan(t_x^{(r)})\bigr)\cdot\frac{180}{\pi}
-$$
-
-If the resulting angle is negative, add $360^\circ$.
-
-The final azimuth range is therefore:
-
-$$
-0^\circ \le \mathrm{Azimuth} < 360^\circ
-$$
-
-#### Altitude
-
-First define
-
-$$
-r = \sqrt{\tan^2(t_x^{(r)}) + \tan^2(t_y^{(r)})}
-$$
-
-Then altitude is:
-
-$$
-\mathrm{Altitude} =
-\begin{cases}
-90^\circ, & r = 0 \\
-\operatorname{atan}\!\left(\frac{1}{r}\right)\cdot\frac{180}{\pi}, & r > 0
-\end{cases}
-$$
-
-The final altitude range is:
-
-$$
-0^\circ \le \mathrm{Altitude} \le 90^\circ
-$$
-
-A perfectly vertical pen therefore has:
-
-$$
-\mathrm{TiltX}=0,\quad \mathrm{TiltY}=0,\quad \mathrm{Altitude}=90^\circ
-$$
-
-In that special case, azimuth is set to $0^\circ$.
-
-Whenever azimuth is compared against a target pose, the comparison must use circular wraparound. For example, $359^\circ$ and $1^\circ$ differ by $2^\circ$, not $358^\circ$.
-
----
-
-## 4. Targets
-
-### Coordinate space
-
-All targets, samples, and corrections are defined in **pre-transform coordinates** (raw tablet units). This includes target coordinates, sampled pointer coordinates, interpolation math, and corrected output.
-
-The Calibration Window is rendered in pixels, but pixels are UI-only.
-
-### Calibration condition
-
-Calibration is performed for the **full tablet screen and full tablet surface** under **absolute mapping**. The target grid is therefore defined over the full raw digitizer range, while still using a physical inset for usability on the tablet's screen.
-
-Because runtime correction happens in PreTransform, later OTD mapping changes such as rotation, output-region changes, or use of only a sub-area still occur after the correction stage.
-
-### Node placement
-
-Position and tilt share the same $R\times C$ Origin Points. Targets must not be placed on the physical border. The default grid is still $3\times3$, but the data model and runtime interpolation are defined for general $R\times C$ grids.
-
-Let $W_{mm},H_{mm}$ be the physical digitizer width and height in millimeters. Define the inset margin:
-
-$$
-m_{mm} = \mathrm{GridInsetMm}
-$$
-
-Let $W_{raw},H_{raw}$ be the full digitizer range in pre-transform digitizer units. Define the corresponding pre-transform digitizer margins:
-
-$$
-m_x=\frac{m_{mm}}{W_{mm}}\,W_{raw},\qquad m_y=\frac{m_{mm}}{H_{mm}}\,H_{raw}
-$$
-
-Define column and row lines for $c\in\{0,\dots,C-1\}$ and $r\in\{0,\dots,R-1\}$:
-
-$$
-X_c = m_x + \frac{c}{C-1}\left(W_{raw}-2m_x\right),\qquad
-Y_r = m_y + \frac{r}{R-1}\left(H_{raw}-2m_y\right)
-$$
-
-Nodes are visited in deterministic order top-left to bottom-right. Only the active node target is visible.
-
-The inset is intentional: it reduces the chance of off-screen targets when raw cursor offset is large, and it avoids fitting extreme edge distortion that a low-order interpolation field cannot represent well. Defining the inset in millimeters keeps margin behavior consistent across devices with different DPI but similar physical size.
-
----
-
-## 5. Calibrator
-
-The Calibrator owns the main screen and the full-screen WPF Calibration Window.
-
-The window must be fullscreen opaque, update many times per second with minimal latency, and stay responsive regardless of pen contact.
-
-### Main screen
-
-The main screen is intentionally simple. It shows the current working calibration state and whether that working state matches what is currently stored in OTD.
-
-It displays:
+For `N` non-upright levels, minimum altitude `M`, and `A` azimuths:
 
 ```text
-CALIBRATION STATUS
-  Position: Default / Calibrated
-  Tilt: Default / Calibrated
-
-OTD SETTINGS
-  Up to date / Pending changes
+altitude[j] = 90 - j * (90 - M) / N    j = 1..N
+azimuth[k]  = 360 * k / A              k = 0..A-1
+captures   = R * C * (1 + A * N)      default: 153
 ```
 
-The two calibration-state labels are derived entirely from the current working calibration:
+Add upright once per node; show total captures before starting. Require integer counts (`R,C >= 2`, `A >= 3`, `N >= 1`), positive sampling/stability parameters, `CaptureTimeoutMs > CaptureWindowMs`, `0 < M < 90`, and altitude/azimuth spacing greater than twice the angle tolerance. Verify usable varying tilt: `ITiltReport` declares no attainable range. Explain rejection of incompatible settings or inadequate orientation coverage.
 
-- **Position: Default** if all stored position offsets are zero
-- **Tilt: Default** if all stored tilt coefficients are zero
+### Grid
 
-Otherwise the corresponding state is **Calibrated**.
+Use selected `Specifications.Digitizer.Width/Height` as `Wmm/Hmm` and `MaxX/MaxY` as `Wraw/Hraw`; require finite positive values. OTD's model has zero origin and no origin field. For inset `m`, require `0 < m < min(Wmm,Hmm)/2`:
 
-`OTD SETTINGS` compares the current working calibration against the calibration JSON currently stored in OTD:
+```text
+mx = m / Wmm * Wraw
+my = m / Hmm * Hraw
+X[c] = mx + c / (C - 1) * (Wraw - 2 * mx)
+Y[r] = my + r / (R - 1) * (Hraw - 2 * my)
+```
 
-- **Up to date** when they are equal
-- **Pending changes** when they differ
+Persist resolved grid coordinates; reject invalid geometry/insets without silently changing layout. Visit nodes top-left to bottom-right, capturing upright then all azimuths at successive lean levels. Show only the active target.
 
-The main screen provides these actions:
+### Angles for guidance and gates
 
-- **Calibrate Position**
-- **Calibrate Tilt**
-- **Copy Calibration**
-- **Check OTD Status**
+Altitude is 90 degrees upright and approaches 0 at the tablet plane; inclination from upright is `90 - altitude`. Azimuth follows the eraser direction relative to the tip:
 
-When `OTD SETTINGS` is `Pending changes`, the main screen shows helper text instructing the user to copy the updated calibration JSON into OTD.
+| Eraser direction | Left    | Down | Right | Up  |
+| ---------------- | ------- | ---- | ----- | --- |
+| Azimuth          | 0 / 360 | 90   | 180   | 270 |
 
-`Check OTD Status` compares the current working calibration against the calibration JSON currently stored in OTD and updates only the status line. It does not overwrite the working calibration.
+Compare azimuth circularly: 359 and 1 differ by 2 degrees. At upright, display it as unavailable and omit its gate.
 
-The Calibrator may also perform this same comparison automatically at appropriate times, such as when the window regains focus or the main screen becomes active again.
+If reported tilt axes are signed angular components, convert their tangents to screen-aligned tip-to-eraser components `sx,sy` (right/down positive), then:
 
-### Calibration Window
+```text
+altitude = atan2(1, sqrt(sx*sx + sy*sy)) in degrees
+azimuth  = wrap360(atan2(sy, -sx) in degrees)
+```
 
-Only the current active node target is drawn. During tilt steps, the window must also show the target pose and the current pose (azimuth/altitude).
+Verify device axis semantics/signs in all four directions and upright; never assume raw signs match this projection. Guidance conversion never alters stored/interpolated tilt; runtime needs no derived angles. OTD's `DisableTilt` only controls pointer tilt forwarding and need not change for acquisition.
 
-### Rendering
+## 3. Capture, review, and UI
 
-The Calibrator samples raw reports and renders target points computed from $T_i$ in raw coordinates.
+Load compatible daemon-applied data from the selected profile as the **working calibration**; missing/empty means identity. Keep unfinished **capture sessions** and completed, structurally valid **candidates** separate. Working/review data stays in memory; OTD's saved profile is the durable source for later launches. Never silently replace pending data on refresh or tablet switch.
 
-When rendering to pixels, the Calibrator must apply the same absolute mapping used by OTD for the current full-screen tablet configuration. Rendering must not use OS cursor APIs as the source of truth for sampling.
+Completion offers `Accept Calibration`, `Recapture`, and `Discard`. Only acceptance replaces working data; cancellation/restart/discard preserves it. Targeted node/pose recapture preserves other samples and rebuilds affected geometry. Review and recapture are also available for loaded working calibration; edits become a candidate and replace working data only on acceptance. Review is for inspecting captures and correcting mistakes, without a separate accuracy-testing session or validated/unvalidated status.
 
-### Info Box
+Working calibration means the Calibrator's accepted in-memory dataset, not the correction currently running in OTD. Acceptance enables copying without applying/saving in OTD; state this beside the action. Accepted results remain session-only until saved in OTD; show pending status before closing. Use OTD presets for durable previous versions.
 
-The Info Box must remain visible while the window is open. It displays, with 1 decimal place:
+### A capture attempt
 
-- pointer position: $p_{\mathrm{step}}$
-- raw tilt axes: $\mathrm{TiltX}, \mathrm{TiltY}$
-- derived angles: $\mathrm{Azimuth}, \mathrm{Altitude}$
-- error: $e_x, e_y$, defined as
+1. `Space` starts one burst; suppress autorepeat/overlap.
+2. Require finite position and tilt in the same eligible pen report. Ignore unrelated auxiliary reports; reject out-of-range, reported proximity loss, and eraser input via available OTD interfaces. Never combine reports or reuse stale tilt. Pressure neither triggers capture nor requires a positive threshold.
+3. Gate every report without prediction/smoothing: upright altitude must be within tolerance of 90; other poses require altitude and circular azimuth within tolerance. Any gate failure discards the attempt.
+4. Collect until **both** duration and sample minima are met, within gap/total timeouts. Use a monotonic local clock; count each event once, including identical repeats. Without hardware timestamps/sequences, some upstream loss is undetectable. Cancel on disconnects/stalls with a retry message.
+5. Compute component-wise position X/Y and tilt X/Y medians over the same burst; average the middle two for even counts. For each report, compute Euclidean distances from median position (convert each displacement axis independently to mm) and median tilt (raw degrees). Sort each list; the 95th percentile is one-based rank `ceil(0.95 * count)`. Reject if either stability limit is exceeded; never accept by trimming outliers.
+6. Store median position/tilt, which represent the burst but need not match an individual report. Never substitute requested poses or use linear medians of wrapped azimuth as interpolation coordinates.
 
-  $$
-  (e_x, e_y) = p_{\mathrm{step}} - T_i
-  $$
+Median/stability checks reduce noise/movement, not systematic aiming error; pose gates cannot establish on-target aiming.
 
-where $T_i$ is the current Origin Point. $p_{\mathrm{step}}$ is the pointer position used by the current step: $p_0$ during Position Calibration, and $p_1$ during Tilt Calibration.
+### Windows and actions
 
-### Input rules
+The opaque full-screen WPF window must remain responsive during pen contact and ignore stylus/mouse/touch UI input (click, drag, hold). Show active target/progress, requested/current angles, latest raw position/tilt/error against target, and capture readiness/progress/retry reasons. Display latest reports to one decimal place; only stored captures use medians.
 
-The Calibration Window must ignore stylus, mouse, and touch interactions. Pen contact must not be interpreted as click, drag, or hold, and must not freeze or throttle sampling or rendering. Keyboard is the only control surface.
+| Key       | Action                                          |
+| --------- | ----------------------------------------------- |
+| Space     | Attempt capture                                 |
+| Backspace | Recapture previous pose, including across nodes |
+| R         | Restart unfinished session                      |
+| Esc       | Cancel and return to main screen                |
 
-Keyboard mappings:
+Main screen shows selected tablet/profile, Default/Calibrated state, candidate state, filter configuration presence/enablement, and OTD applied-data status (Matches working calibration/Pending changes). Measured data is Calibrated even with zero errors; Default means identity/missing data. Invalid/unsupported data is an error. All are read-only observations.
 
-- `Space`: attempt capture (subject to capture rules)
-- `Backspace`: redo previous step (go back one node/pose and recapture)
-- `R`: soft reset the current calibration section only
-  - if calibrating position: restart Position Calibration at the first node
-  - if calibrating tilt: restart Tilt Calibration at the first node or pose
-- `Esc`: close the window without modifying the current working calibration unless the session completed successfully
+Main actions: `Calibrate`, `Review Calibration`, `Copy Calibration`, and `Refresh from OTD`. Review opens existing measured captures for targeted recapture; identity data requires a new calibration. Copy uses accepted working data and instructs users to paste into OTD's **Calibration data** field and Save. Refresh reads settings and updates status; replacing pending working data with OTD data requires explicit choice. Switching tablets with pending data requires an explicit choice to finish or discard it.
 
-A reset-persisted-calibration action must exist in the OTD UI.
+Use section 1's OTD workflows for reset, enable/disable, backup/restore, and presets. Add no Calibrator calibration-file Import/Export, Reset Working Calibration, or Apply/Save buttons. Validate loaded OTD settings/preset data with the same core checks as new captures.
 
----
+## 4. Interpolation and runtime
 
-## 6. Position Calibration
+### Within a node
 
-Position Calibration is a tablet-surface correction of **where the cursor lands after mapping**. It measures how far the raw pointer position is from known targets across the configured $R\times C$ grid, treats those measurements as samples of a smooth error field, and then subtracts an interpolated error from every report at runtime.
+Triangulate measured `(TiltX,TiltY)` points, initially using Delaunay. This interpolator belongs in the shared core; OTD settings/pipeline APIs do not provide it. Use a compatible geometry library with robust predicates and deterministic behavior, not a new triangulation engine. Measurements are authoritative; build derived mesh/lookup caches at node completion/load. Inside each triangle, blend vertex errors barycentrically:
 
-In other words: the Correction Filter applies **pointer position minus the estimated position error**.
+```text
+nodeError(t) = w0*error0 + w1*error1 + w2*error2
+w0 + w1 + w2 = 1
+```
 
-Position Calibration includes both capturing position errors in the Calibrator and applying them in the Correction Filter.
+This reproduces vertex errors and is continuous across shared edges. Evaluate relevant nodes' independent meshes/boundaries at current raw tilt, including upright without a special branch. Alternative orientation coordinates change intermediate results and require documented justification and validation.
 
-### What is measured
+Reject new captures within 0.1 degree Euclidean tilt distance of another sample and request recapture. Node completion requires a usable nondegenerate mesh with captured upright strictly inside its hull; identify failing poses before advancing.
 
-For each grid node, the Calibrator displays the current target point $T_i$ and instructs the user to hold the pen upright (altitude near $90^\circ$). When the user triggers a capture (Section 8), the Calibrator records one position-calibration sample for that node.
+Every mesh, including OTD-loaded data, must contain `(0, 0)` strictly inside its hull, surrounding vertical. Loaded data need not identify an upright sample: validate measured geometry, not guidance metadata. This check neither creates an origin sample nor moves recorded points.
 
-Define the measured position error at that node as:
+Sort vertices lexicographically by measured `(TiltX, TiltY)` before triangulation; resolve ties deterministically so sample reordering cannot change correction. Use robust predicates and retain distinct samples; interior collinearity/cocircular rings are not inherently invalid. Never jitter vertices or invent errors; clearly reject unusable loaded geometry.
 
-$$
-e_{\mathrm{pos}} = (e_x,e_y) = p_0 - T_i
-$$
+Outside each node's convex hull, project to the nearest boundary point by raw tilt-coordinate distance and interpolate there. Never extrapolate or modify report tilt. Polygonal rings can clamp near the altitude limit even within the requested range; validate this separately.
 
-For an $R\times C$ grid, we store one error vector per node:
+### Across nodes
 
-$$
-e_{\mathrm{pos},r,c},\qquad r\in\{0,\dots,R-1\},\ c\in\{0,\dots,C-1\}
-$$
+For raw position `p` and tilt `t`, clamp only the position lookup to the grid rectangle, select its cell, and bilinearly blend its four node errors evaluated at `t`. Arrays use `[row][column]`; `u,v` are normalized horizontal/vertical cell coordinates:
 
-### Runtime
+```text
+E = (1-u)*(1-v)*E[r][c] + u*(1-v)*E[r][c+1]
+  + (1-u)*v*E[r+1][c] + u*v*E[r+1][c+1]
+correctedPosition = p - E
+```
 
-At runtime, the Correction Filter must estimate a position error for any raw position, but calibration only provides errors at discrete grid nodes. We treat the node errors $e_{\mathrm{pos},r,c}$ as samples of a smooth **position error field** and reconstruct the error at an arbitrary point by **bilinear interpolation** between surrounding nodes.
+Look up cells using original raw position, never corrected position or a captured-position mesh. Target coordinates index nodes; captured positions supply errors. This approximate error field is not an exact inverse: measure residuals at training targets, especially with large offsets/gradients; never promise exact target reproduction.
 
-Because nodes are inset by a margin, the grid covers only the rectangle $[X_0, X_{C-1}]\times[Y_0, Y_{R-1}]$. When the pen is near physical edges (outside that inset), the filter clamps into the grid domain before interpolating. This avoids extrapolation and keeps behavior stable.
+Never clamp actual output to the inset grid. Update position via the original report's `IAbsolutePositionReport` and emit that report once, preserving concrete type and all other fields; never substitute a generic tablet report or copy a boxed struct into another object. Pass through unchanged: identity data, auxiliary/out-of-range/eraser reports, reported proximity loss, and reports without usable paired pen position/tilt. Never apply nib calibration to erasers or assume upright for missing tilt. Use OTD `Log` for initialization failures and persistent unsupported input, without per-report logging. The Calibrator may explain compatibility issues observed in its own input.
 
-Let $p_0=(x,y)$. Clamp into the grid domain:
+Prepare immutable calibration snapshots outside the report path. No per-report file I/O, fitting, mesh construction, large allocations, or long-lived locks.
 
-$$
-x_c=\mathrm{clamp}(x,\ X_0,\ X_{C-1}),\qquad y_c=\mathrm{clamp}(y,\ Y_0,\ Y_{R-1})
-$$
+## 5. Data and persistence
 
-Choose the cell indices $a,b$ such that:
+Version 2 replaces version 1's position field/fitted coefficients with measured samples. Measured data requires every field below except `requestedPose`.
 
-$$
-X_a \le x_c \le X_{a+1},\qquad
-Y_b \le y_c \le Y_{b+1}
-$$
+| Field                                | Meaning                                                                                 |
+| ------------------------------------ | --------------------------------------------------------------------------------------- |
+| `format`, `version`, `mode`          | `"CalibrationSuite"`, `2`, `"measured"`                                                 |
+| `sourceGeometry.maxX/maxY`           | OTD raw digitizer maxima at capture                                                     |
+| `sourceGeometry.widthMm/heightMm`    | Active digitizer dimensions in millimeters at capture                                   |
+| `grid.preTransformRowCoordinates`    | Raw Y coordinates; array length is row count                                            |
+| `grid.preTransformColumnCoordinates` | Raw X coordinates; array length is column count                                         |
+| `nodes[r][c].samples`                | Measurements for target `(columnCoordinates[c], rowCoordinates[r])`; zero-based indices |
+| Sample `position.x/y`                | Captured burst median position, in raw digitizer units                                  |
+| Sample `tilt.x/y`                    | Captured burst median OTD tilt axes, in degrees                                         |
+| Sample `requestedPose`               | Optional capture guidance in degrees; never interpolation coordinates                   |
 
-Normalized coordinates inside the selected cell:
+- Names/enum strings are case-sensitive; numbers finite; versions/counts integers. Ignore unknown optional properties only in supported versions; reject unknown versions/modes.
+- Grid lines strictly increase within raw digitizer bounds, with at least two rows/columns and exactly matching `nodes` dimensions. Require at least four distinct samples/node and usable geometry (section 4). Allow nonuniform grids/differing sample counts.
+- Derive targets from row/column coordinates and errors as `position - target`; never persist redundant authoritative errors.
+- Compare all four `sourceGeometry` fields to injected OTD geometry with relative tolerance `1e-6`. Mismatches require recalibration, never rescaling. This guards configuration changes/incompatible pastes; matching geometry neither proves tablet/pen equivalence nor replaces OTD profile selection.
 
-$$
-u=\frac{x_c-X_a}{X_{a+1}-X_a},\qquad
-v=\frac{y_c-Y_b}{Y_{b+1}-Y_b}
-$$
+The Calibrator writes guidance, e.g. `"requestedPose": { "altitudeDeg": 70, "azimuthDeg": 90 }`: altitude in `(0, 90]`, non-upright azimuth in `[0, 360)`, upright azimuth omitted. Loaded samples may omit it; derive their targeted-recapture guidance from measured orientation. Within upright angle tolerance, request upright without an azimuth gate. This affects only the new capture, never existing measurements/classification; replace measurements only on acceptance. Runtime ignores guidance; generation preferences stay local.
 
-Bilinear interpolation of the position error:
-
-$$
-e_{\mathrm{pos}}(u,v)=(1-u)(1-v)e_{\mathrm{pos},a,b}+u(1-v)e_{\mathrm{pos},a+1,b}+(1-u)v\,e_{\mathrm{pos},a,b+1}+uv\,e_{\mathrm{pos},a+1,b+1}
-$$
-
-Apply Position Calibration:
-
-$$
-p_1 = p_0 - e_{\mathrm{pos}}(u,v)
-$$
-
-This $p_1$ is the input position used by Tilt Calibration and by runtime tilt correction.
-
-### Working-calibration effect
-
-When Position Calibration completes successfully, the Calibrator updates the position section in the current working calibration and resets all tilt coefficients to zero. Returning to the main screen therefore yields:
-
-- `Position: Calibrated`
-- `Tilt: Default`
-- `OTD SETTINGS: Pending changes`
-
-until the user updates OTD with the new calibration JSON.
-
----
-
-## 7. Tilt Calibration
-
-Tilt Calibration is a tablet-surface correction of tilt-induced **tilt error**. It measures the remaining error at many tilt poses across all grid nodes, fits per-node coefficients for a shared tilt model, and subtracts the model-predicted tilt error at runtime.
-
-In other words: the Correction Filter applies **$p_2 = p_1 - \hat e_{\mathrm{tilt}}$**, where $\hat e_{\mathrm{tilt}}$ depends on raw tilt inputs and on position.
-
-Tilt Calibration includes capturing pose samples in the Calibrator, solving coefficients once, and applying tilt correction in the Correction Filter.
-
-Tilt Calibration always runs against the current working position calibration. If the current position field is still default zero, then the position stage is a no-op and tilt is calibrated on top of $p_1=p_0$.
-
-### What is measured
-
-During tilt collection, the tilt stage remains zero while the Calibrator forms the residual against the current working position stage. The goal is to measure **tilt error** at many poses and then learn how that error depends on raw tilt inputs.
-
-At a given node target $T_i$, define the tilt error for a captured pose sample as:
-
-$$
-e_{\mathrm{tilt}} = (e_x,e_y) = p_1 - T_i
-$$
-
-Each pose sample stores the pair of raw tilt inputs $(t_x,t_y)=(\mathrm{TiltX},\mathrm{TiltY})$ together with the measured tilt error $(e_x,e_y)$.
-
-Because the Calibrator samples raw reports, it computes $p_1$ locally from $p_0$ using the position field currently present in the working calibration. In other words, the Calibrator first removes the error already explained by the current position stage, then fits the tilt model to the remaining error. If the current position field is still default zero, then this step leaves $p_1=p_0$.
-
-### Poses
-
-At each node, capture 16 poses:
-
-- altitude $= 65^\circ$, azimuth $\in \{0,45,90,135,180,225,270,315\}$
-- altitude $= 45^\circ$, azimuth $\in \{0,45,90,135,180,225,270,315\}$
-
-The Calibrator shows both target and current azimuth and altitude. Capture gating for these poses uses $\mathrm{AngleToleranceDeg}$ and is defined in Section 8.
-
-### Model
-
-We capture tilt error at only a finite set of poses (16 per node). At runtime, however, the pen can take essentially any azimuth and altitude. The tilt correction model is a compact function fitted from those sparse samples so the filter can predict tilt error continuously across orientations instead of correcting only the exact poses that were measured.
-
-We use the same model form everywhere; only the coefficients vary across the tablet surface.
-
-Runtime applies tilt correction by subtracting predicted tilt error:
-
-$$
-p_2 = p_1 - \hat e_{\mathrm{tilt}}(t_x,t_y)
-$$
-
-Each node has 5 coefficients:
-
-$$
-K_{x2},\ K_{y2},\ K_x,\ K_y,\ K_{xy}
-$$
-
-Given raw tilt $(t_x,t_y)$, the model predicts the tilt error components:
-
-$$
-\hat e_{\mathrm{tilt},x}(t_x,t_y) = K_{x2}\,t_x|t_x| + K_x\,t_x - K_{xy}\,t_x|t_y|
-$$
-
-$$
-\hat e_{\mathrm{tilt},y}(t_x,t_y) = K_{y2}\,t_y|t_y| + K_y\,t_y - K_{xy}\,t_y|t_x|
-$$
-
-### Solve
-
-We solve one coefficient set per grid node using all captured samples, while also encouraging coefficients to vary smoothly across the tablet surface.
-
-There are $5RC$ unknowns total (5 per node across an $R\times C$ grid). Choose them so that:
-
-1) **Data fit**: for every captured pose sample, the model prediction $\hat e_{\mathrm{tilt}}$ is close to the measured $e_{\mathrm{tilt}}$.  
-2) **Neighbor similarity**: adjacent nodes have similar coefficients.  
-3) **Small-coefficient preference**: coefficients stay small unless the data clearly requires otherwise.
-
-This is a single linear least-squares solve, because the model is linear in the coefficients.
-
-Each captured sample contributes two linear equations (one for $e_x$, one for $e_y$) for the node where it was captured:
-
-$$
-e_x \approx K_{x2}\,t_x|t_x| + K_x\,t_x - K_{xy}\,t_x|t_y|
-$$
-
-$$
-e_y \approx K_{y2}\,t_y|t_y| + K_y\,t_y - K_{xy}\,t_y|t_x|
-$$
-
-To add neighbor similarity, include additional equations that penalize differences between adjacent nodes. For each adjacent node pair $(i,j)$ and each coefficient type, add a row:
-
-$$
-K^{(i)} - K^{(j)} \approx 0
-$$
-
-All neighbor-difference rows are weighted by $\sqrt{\lambda}$.
-
-To add small-coefficient preference, include additional equations that penalize coefficient magnitude. For each node and each coefficient type, add a row:
-
-$$
-K^{(i)} \approx 0
-$$
-
-All magnitude rows are weighted by $\sqrt{\mu}$.
-
-Solve using a numerically stable method such as QR or SVD.
-
-#### System
-
-Stack all unknown coefficients (all nodes) into one vector $\mathbf{k}$ ($5RC$ unknowns total). Stack all sample equations into:
-
-$$
-A\,\mathbf{k} \approx \mathbf{b}
-$$
-
-where:
-
-- $\mathbf{k}$ is the vector of **unknown coefficients** (all $5RC$ values: 5 coefficients per node across the full grid).
-- $A$ is a large matrix of **known numbers** built from the captured data. Each row represents one of the equations above, filled with terms computed from the measured tilt inputs (things like $t_x|t_x|$, $t_x$, $t_x|t_y|$) and with columns corresponding to the coefficients for the correct node.
-- $\mathbf{b}$ is the vector of **measured outputs** (the stacked measured errors $e_x$ and $e_y$ from the samples).
-
-To stabilize the solve, we add two additional penalties:
-
-- **Neighbor similarity**: adjacent nodes should have similar coefficients. Let $D$ be a sparse difference matrix such that $D\,\mathbf{k}$ is the list of coefficient differences between grid neighbors. Penalizing $\lVert D\,\mathbf{k} \rVert^2$ encourages smooth coefficient variation across the screen.
-- **Small-coefficient preference**: keep coefficients small unless data forces them larger. This is the standard ridge term $\lVert \mathbf{k} \rVert^2$.
-
-The final objective is:
-
-$$
-\min_{\mathbf{k}}\; \lVert A\,\mathbf{k} - \mathbf{b} \rVert^2 
-+ \lambda\, \lVert D\,\mathbf{k} \rVert^2 
-+ \mu\, \lVert \mathbf{k} \rVert^2
-$$
-
-In code, this is implemented by appending extra rows and solving a single augmented least-squares system:
-
-$$
-\begin{bmatrix}
-A \\
-\sqrt{\lambda}\,D \\
-\sqrt{\mu}\,I
-\end{bmatrix}
-\mathbf{k}
-\approx
-\begin{bmatrix}
-\mathbf{b} \\
-\mathbf{0} \\
-\mathbf{0}
-\end{bmatrix}
-$$
-
-Here $I$ is the identity matrix (it selects each coefficient directly), and $\mathbf{0}$ are zero vectors of matching size.
-
-### Runtime
-
-At runtime, tilt correction is applied after position correction.
-
-For each report, the Correction Filter does:
-
-1) Compute $p_1$ using the position error field.  
-2) Interpolate the 5 tilt coefficients at the position $p_1$ using the same cell selection and $(u,v)$ logic as position.  
-3) Evaluate the tilt model to obtain the predicted tilt error.  
-4) Subtract the predicted error to produce $p_2$.
-
-Interpolate coefficients at $p_1$ to obtain:
-
-$$
-K_{x2}(p_1),\ K_{y2}(p_1),\ K_x(p_1),\ K_y(p_1),\ K_{xy}(p_1)
-$$
-
-Evaluate the predicted tilt error:
-
-$$
-\hat e_{\mathrm{tilt},x} = K_{x2}(p_1)\,t_x|t_x| + K_x(p_1)\,t_x - K_{xy}(p_1)\,t_x|t_y|
-$$
-
-$$
-\hat e_{\mathrm{tilt},y} = K_{y2}(p_1)\,t_y|t_y| + K_y(p_1)\,t_y - K_{xy}(p_1)\,t_y|t_x|
-$$
-
-Apply Tilt Calibration:
-
-$$
-p_2 = p_1 - (\hat e_{\mathrm{tilt},x},\hat e_{\mathrm{tilt},y})
-$$
-
-### Working-calibration effect
-
-When Tilt Calibration completes successfully, the Calibrator replaces only the tilt section in the current working calibration and preserves the current position section. Returning to the main screen therefore yields:
-
-- `Position: Default` or `Calibrated`, depending on the working position field
-- `Tilt: Calibrated`
-- `OTD SETTINGS: Pending changes`
-
-until the user updates OTD with the new calibration JSON.
-
----
-
-## 8. Capture
-
-A **capture** is the atomic data-collection action used by both Position Calibration and Tilt Calibration. It is triggered only by the keyboard (`Space`). Each successful capture yields exactly one sample for the current step (position node or tilt pose) that is:
-
-- valid (passes the gate for the current step), and
-- robust to noise (computed as the median of a short burst of raw reports)
-
-If the gate fails at any point during the capture, the capture is discarded and the Calibrator prompts the user to retry.
-
-### Trigger
-
-- `Space`: start a capture attempt for the current node or pose.
-
-### Gate
-
-A **gate** is a condition on pen pose that must remain true during the entire capture window.
-
-- Position Calibration gate: altitude within $\mathrm{AngleToleranceDeg}$ of $90^\circ$.
-- Tilt Calibration gate: azimuth and altitude each within $\mathrm{AngleToleranceDeg}$ of their pose targets.
-
-Gate checks use raw sensor values and the derived-angle formulas defined in Section 3 (no smoothing/filtering/prediction).
-
-### Sampling
-
-While the capture is active, the Calibrator collects a burst of raw tablet reports. For each quantity needed by the current step (for example $x$, $y$, $t_x$, $t_y$, azimuth, altitude), the captured value is the **median** over the burst.
-
-The live Info Box continues to display the latest raw values. Only the stored sample uses the median.
-
-A capture ends only when both conditions are satisfied:
-
-- elapsed time $\ge \mathrm{CaptureWindowMs}$, and
-- samples collected $\ge \mathrm{MinSamplesPerCapture}$
-
-This means that, depending on report rate:
-
-- if reports arrive **slowly**, the burst may run **longer than** $\mathrm{CaptureWindowMs}$ until $\mathrm{MinSamplesPerCapture}$ samples are collected
-- if reports arrive **quickly**, the burst may collect **more than** $\mathrm{MinSamplesPerCapture}$ samples, but it still continues until elapsed time $\ge \mathrm{CaptureWindowMs}$
-
-### Responsiveness
-
-Samples must be taken from the same raw report stream the Correction Filter uses, to preserve precision and avoid UI or input throttling side effects.
-
-The Calibration Window must remain responsive and keep updating even while the pen touches the screen. Pen contact must not be interpreted as UI input.
-
----
-
-## 9. Persistence
-
-Calibration Suite persists one complete calibration JSON document in OTD settings. This calibration JSON is the runtime source of truth for the Correction Filter.
-
-The calibration JSON always contains both a position section and a tilt section. A section that has not yet been calibrated is represented by all-zero values, not by an omitted block.
-
-### Calibration JSON structure
-
-The persisted calibration JSON has this structure:
+Illustrative 2x2 document: fictional 100 x 100 mm, 1000 x 1000 raw digitizer, 15 mm inset, fewer poses than default. Do not reuse as calibration:
 
 ```json
 {
   "format": "CalibrationSuite",
-  "version": 1,
-  "grid": {
-    "preTransformRowCoordinates": [37.5, 250.0, 462.5],
-    "preTransformColumnCoordinates": [50.0, 500.0, 950.0]
+  "version": 2,
+  "mode": "measured",
+  "sourceGeometry": {
+    "maxX": 1000,
+    "maxY": 1000,
+    "widthMm": 100,
+    "heightMm": 100
   },
-  "positionOffsets": [
-    [{ "x": 0.0, "y": 0.0 }, { "x": 0.0, "y": 0.0 }, { "x": 0.0, "y": 0.0 }],
-    [{ "x": 0.0, "y": 0.0 }, { "x": 0.0, "y": 0.0 }, { "x": 0.0, "y": 0.0 }],
-    [{ "x": 0.0, "y": 0.0 }, { "x": 0.0, "y": 0.0 }, { "x": 0.0, "y": 0.0 }]
-  ],
-  "tiltCoefficients": [
-    [{ "kx2": 0.0, "ky2": 0.0, "kx": 0.0, "ky": 0.0, "kxy": 0.0 },
-     { "kx2": 0.0, "ky2": 0.0, "kx": 0.0, "ky": 0.0, "kxy": 0.0 },
-     { "kx2": 0.0, "ky2": 0.0, "kx": 0.0, "ky": 0.0, "kxy": 0.0 }],
-    [{ "kx2": 0.0, "ky2": 0.0, "kx": 0.0, "ky": 0.0, "kxy": 0.0 },
-     { "kx2": 0.0, "ky2": 0.0, "kx": 0.0, "ky": 0.0, "kxy": 0.0 },
-     { "kx2": 0.0, "ky2": 0.0, "kx": 0.0, "ky": 0.0, "kxy": 0.0 }],
-    [{ "kx2": 0.0, "ky2": 0.0, "kx": 0.0, "ky": 0.0, "kxy": 0.0 },
-     { "kx2": 0.0, "ky2": 0.0, "kx": 0.0, "ky": 0.0, "kxy": 0.0 },
-     { "kx2": 0.0, "ky2": 0.0, "kx": 0.0, "ky": 0.0, "kxy": 0.0 }]
+  "grid": {
+    "preTransformRowCoordinates": [150, 850],
+    "preTransformColumnCoordinates": [150, 850]
+  },
+  "nodes": [
+    [
+      {
+        "samples": [
+          { "position": { "x": 152, "y": 151 }, "tilt": { "x": 0, "y": 0 } },
+          { "position": { "x": 156, "y": 151 }, "tilt": { "x": 39, "y": 1 } },
+          { "position": { "x": 152, "y": 155 }, "tilt": { "x": -1, "y": 40 } },
+          { "position": { "x": 148, "y": 151 }, "tilt": { "x": -40, "y": 0 } },
+          { "position": { "x": 152, "y": 147 }, "tilt": { "x": 1, "y": -39 } }
+        ]
+      },
+      {
+        "samples": [
+          { "position": { "x": 853, "y": 151 }, "tilt": { "x": 0, "y": 1 } },
+          { "position": { "x": 858, "y": 151 }, "tilt": { "x": 40, "y": 0 } },
+          { "position": { "x": 853, "y": 155 }, "tilt": { "x": 0, "y": 39 } },
+          { "position": { "x": 848, "y": 151 }, "tilt": { "x": -39, "y": -1 } },
+          { "position": { "x": 853, "y": 147 }, "tilt": { "x": 0, "y": -40 } }
+        ]
+      }
+    ],
+    [
+      {
+        "samples": [
+          { "position": { "x": 152, "y": 852 }, "tilt": { "x": 1, "y": 0 } },
+          { "position": { "x": 156, "y": 852 }, "tilt": { "x": 40, "y": 1 } },
+          { "position": { "x": 152, "y": 857 }, "tilt": { "x": 0, "y": 40 } },
+          { "position": { "x": 148, "y": 852 }, "tilt": { "x": -40, "y": 0 } },
+          { "position": { "x": 152, "y": 847 }, "tilt": { "x": -1, "y": -39 } }
+        ]
+      },
+      {
+        "samples": [
+          { "position": { "x": 853, "y": 852 }, "tilt": { "x": 0, "y": 0 } },
+          { "position": { "x": 858, "y": 852 }, "tilt": { "x": 39, "y": -1 } },
+          { "position": { "x": 853, "y": 857 }, "tilt": { "x": 1, "y": 40 } },
+          { "position": { "x": 848, "y": 852 }, "tilt": { "x": -40, "y": 0 } },
+          { "position": { "x": 853, "y": 847 }, "tilt": { "x": 0, "y": -40 } }
+        ]
+      }
+    ]
   ]
 }
 ```
 
-### Meaning
+Identity requires no grid, geometry, or samples:
 
-`format` and `version` identify the calibration data format and schema version.
+```json
+{ "format": "CalibrationSuite", "version": 2, "mode": "identity" }
+```
 
-`grid.preTransformRowCoordinates` and `grid.preTransformColumnCoordinates` store the resolved grid line coordinates directly in pre-transform units. Grid shape is inferred from their lengths.
+Before activation, validate schema, geometry compatibility, dimensions, and sample meshes. Invalid/unsupported data yields identity behavior with OTD-log/Calibrator diagnostics, never a successful Default label. Version 1 requires recalibration: preserve its JSON until replacement/reset; never fabricate captures from coefficients.
 
-The calibration JSON does not need to persist generation inputs such as `GridInsetMm` or digitizer geometry (`MaxX`, `MaxY`, `Width`, `Height`), because runtime consumes the resolved pre-transform coordinates directly.
+### Applying, saving, and status
 
-`positionOffsets` stores position error vectors in pre-transform units. Its matrix dimensions must match `preTransformRowCoordinates × preTransformColumnCoordinates`.
+Copy accepted working data as complete compact single-line JSON to the clipboard. In OTD: select the intended tablet, open Filters, select Calibration Suite, paste into **Calibration data**, enable it, and **Save** (persists and applies). OTD serializes the string automatically; users never escape JSON or edit settings files. **Apply** updates runtime without proving a disk save.
 
-`tiltCoefficients` stores tilt-model coefficient sets with the same matrix dimensions, using names that match the model terms:
+Section 1's clear-and-Save workflow resets only this calibration to identity; the enable checkbox bypasses correction while retaining data. OTD settings Open/Save as and presets preserve embedded calibration for backup/restore/manual switching, but affect the whole settings document. Preset selection/application does not prove a disk save. Add no separate calibration-file workflow.
 
-- `kx2` for $K_{x2}$
-- `ky2` for $K_{y2}$
-- `kx` for $K_x$
-- `ky` for $K_y$
-- `kxy` for $K_{xy}$
+Calibrator configuration access is read-only: never call `SetSettings`, edit OTD settings files, or use global `ResetSettings` for calibration reset. Its only daemon mutation is temporary `SetTabletDebug` acquisition. Keep configuration/persistence changes in OTD's UI.
 
-### Default interpretation
+`Refresh from OTD` compares decoded daemon-applied `GetSettings()` calibration content, ignoring whitespace/object-property order but retaining array order; missing/empty equals explicit identity. Copying changes no status. A match does not prove disk persistence or filter construction/execution, or reflect unsaved UX edits: OTD can retain settings for a plugin that failed to construct. Show a Save-in-OTD reminder; distinguish configuration observations from runtime evidence. Use OTD logs/diagnostics for runtime failures; add no parallel log viewer or claim of a nonexistent runtime-health API. Preserve pending working data unless explicitly replaced (section 3).
 
-Calibration JSON is interpreted as follows:
+## 6. Verification and deferred accuracy testing
 
-- position is **Default** when all `positionOffsets` values are zero
-- tilt is **Default** when all `tiltCoefficients` values are zero
+The initial release includes capture quality gates, structural data validation, automated correction tests, and manual device/integration checks. It does not include guided accuracy-validation sessions, generated test targets/poses, before/after error reports, comparison against previous calibration, or validation-result tracking and skip actions. These are deferred and do not block initial delivery.
 
-Otherwise the corresponding section is **Calibrated**.
+After accepting, copying, and saving calibration in OTD, users try actual cursor behavior and can return to the Calibrator to review/recapture mistakes. Acceptance confirms the dataset to copy; it does not certify physical accuracy. Manual device checks should cover positions and orientations between captures and near coverage boundaries, with correction enabled and bypassed. Record observed behavior and limitations without inventing an accuracy threshold.
 
-If no calibration JSON is present in OTD settings, the Calibrator and the Correction Filter must synthesize the default all-zero calibration data in memory and behave exactly as if it had been stored explicitly.
+A future guided accuracy-testing feature may reuse acquisition and the shared evaluator to compare raw, candidate, and previous correction on identical held-out reports. Its detailed workflow and defaults require a separate specification before implementation. Do not build placeholder UI or validation state for it now.
 
-### User workflow
+### Required implementation checks
 
-The Calibrator reads the current calibration JSON from OTD and uses it as the initial working calibration.
+| Checks               | Coverage                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Math/data            | Exact node tilt-vertex reproduction within numeric tolerance; combined spatial residuals including large offsets/gradients; triangle/grid continuity; hull clamping; upright and circular azimuth/signs; identity, geometry mismatches, malformed data, version 1 rejection                                                                                                                                                                                                |
+| Workflow/integration | Candidate accept/discard and session-only pending data; OTD Plugin Manager, generated property paste/clear, enable checkbox, Save/Apply, settings/presets round-trip; filter stage/stored-order compatibility, including harmless earlier filters, conflicting earlier filters, and downstream filters; report reconstruction/interfaces/events; applied vs saved vs runtime status; settings-change detection; monitor DPI/offsets; sampling/rendering during pen contact |
+| Device               | Orientation semantics, capture defaults, held-out positional/tilt accuracy; mathematical tests alone do not establish hardware accuracy                                                                                                                                                                                                                                                                                                                                    |
 
-When the user chooses **Copy Calibration**, the Calibrator copies the complete current working calibration to the clipboard as calibration JSON.
+## 7. OTD source references
 
-The user then pastes that JSON into OTD's Calibration Suite settings. OTD handles normal settings persistence.
+Integration was checked against the adjacent `OpenTabletDriver-0.6.7` tree. These sources establish OTD behavior, not universal tilt signs/ranges or physical accuracy.
 
-`Copy Calibration` does not change the `OTD SETTINGS` status by itself. That status changes to `Up to date` only after the Calibrator compares the working calibration against the calibration JSON currently stored in OTD and finds them equal.
+Use the adjacent `Sample Plugins` tree as a source of examples and ideas, including packaging conventions. Its implementations are not necessarily optimal or appropriate for this project. Evaluate approaches against this specification and OTD 0.6.7's actual contracts, considering correctness, maintainability, and runtime cost; do not copy patterns solely because a sample uses them. Both adjacent trees are read-only references for this project.
 
-### Reset, import, and export
-
-A reset-persisted-calibration action in the OTD UI must replace both sections with default all-zero values.
-
-Import and export actions in the OTD UI read and write the same calibration JSON structure described above.
-
----
-
-## 10. Performance
-
-The Correction Filter must do only:
-
-1. compute $p_1$ by subtracting interpolated position error from $p_0$
-2. compute $p_2$ by interpolating tilt coefficients at $p_1$, predicting tilt error, and subtracting it
-3. output $p_2$
-
-It must not do per-report file I/O, coefficient solving, large allocations, or long-lived locks.
-
----
-
-## 11. Parameters
-
-Sampling:
-
-- $\mathrm{CaptureWindowMs}$
-- $\mathrm{MinSamplesPerCapture}$
-
-Gates:
-
-- $\mathrm{AngleToleranceDeg}$ (single tolerance for all gates; default $3^\circ$)
-
-Solver:
-
-- $\lambda$ (neighbor similarity weight)
-- $\mu$ (small-coefficient weight)
-
-Grid:
-
-- $\mathrm{RowCount}$ and $\mathrm{ColumnCount}$ (default $3\times3$)
-- $\mathrm{GridInsetMm}$, a fixed physical inset margin used for target placement
+| Concern                                     | Source paths within that tree                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Profiles/filter construction                | `OpenTabletDriver.Desktop/Profiles/Profile.cs`; `OpenTabletDriver.Desktop/Profiles/ProfileCollection.cs`; `OpenTabletDriver.Daemon/DriverDaemon.cs` (`SetSettings`, `SetOutputModeElements`)                                                                                                                    |
+| Settings/injection                          | `OpenTabletDriver.Desktop/Reflection/PluginSettingStore.cs`                                                                                                                                                                                                                                                     |
+| Pipeline order                              | `OpenTabletDriver.Plugin/Output/OutputMode.cs`; `OpenTabletDriver.Plugin/Output/PipelineManager.cs`                                                                                                                                                                                                             |
+| Mapping/dimensions                          | `OpenTabletDriver.Plugin/Output/AbsoluteOutputMode.cs`; `OpenTabletDriver.Plugin/Tablet/DigitizerSpecifications.cs`                                                                                                                                                                                             |
+| Debug reports/RPC                           | `OpenTabletDriver/Devices/DeviceReader.cs`; `OpenTabletDriver.Desktop/RPC/DebugReportData.cs`; `OpenTabletDriver.Desktop/RPC/RpcClient.cs`; `OpenTabletDriver.Desktop/Contracts/IDriverDaemon.cs`; `OpenTabletDriver.UX/RPC/DaemonRpcClient.cs`                                                                 |
+| Tilt                                        | `OpenTabletDriver.Plugin/Tablet/ITiltReport.cs`; `OpenTabletDriver.Plugin/Tablet/TiltTabletReport.cs`; `OpenTabletDriver.Configurations/Parsers/Wacom/IntuosV2/IntuosV2Report.cs`                                                                                                                               |
+| UI/save/apply                               | `OpenTabletDriver.UX/Controls/GeneratedControls.cs`; `OpenTabletDriver.UX/MainForm.cs` (`SaveSettings`, `ApplySettings`); `DriverDaemon.GetSettings`                                                                                                                                                            |
+| Filter selection/ordering limitations       | `OpenTabletDriver.UX/Controls/PluginSettingStoreCollectionEditor.cs`; `OpenTabletDriver.Desktop/Reflection/PluginSettingStoreCollection.cs` (`FromType`)                                                                                                                                                        |
+| Plugin installation and UI extension limits | `OpenTabletDriver.UX/Windows/Plugins/PluginManagerWindow.cs`; `OpenTabletDriver.UX/Controls/PluginSettingStoreEditor.cs`; `OpenTabletDriver.Plugin/Attributes/ActionAttribute.cs`                                                                                                                               |
+| Existing client/type initialization         | `OpenTabletDriver.UX/MainForm.cs` (`HandleDaemonConnected`); `OpenTabletDriver.Desktop/Reflection/DesktopPluginManager.cs`; `OpenTabletDriver.Desktop/RPC/DebugReportData.cs` (`ToObject`); `OpenTabletDriver.Console/Program.IPC.cs`; `Directory.Build.props`                                                  |
+| Public mapping/display reuse                | `OpenTabletDriver.Desktop/Output/AbsoluteMode.cs`; `OpenTabletDriver.Desktop/Interop/DesktopInterop.cs`; `OpenTabletDriver.Desktop/Interop/Display/WindowsDisplay.cs`; `OpenTabletDriver.UX/Controls/Output/AbsoluteModeEditor.cs`; `OpenTabletDriver.Desktop/Interop/Input/Absolute/WindowsAbsolutePointer.cs` |
+| Backup/restore/presets                      | `OpenTabletDriver.UX/MainForm.cs` (`LoadSettingsDialog`, `SaveSettingsDialog`, `SavePresetDialog`, `PresetButtonHandler`); `OpenTabletDriver.Desktop/PresetManager.cs`                                                                                                                                          |
