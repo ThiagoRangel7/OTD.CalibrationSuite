@@ -1,0 +1,29 @@
+# .NET build output
+**/[Bb]in/
+**/[Oo]bj/
+artifacts/
+
+# Visual Studio and per-user IDE settings
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Test and coverage output
+TestResults/
+**/TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# NuGet packages restored by legacy projects
+packages/
+
+# Local logs and temporary files
+*.log
+*.tmp
+
+# Windows Explorer metadata
+Thumbs.db
+Desktop.ini
