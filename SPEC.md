@@ -1,6 +1,6 @@
 # Calibration Suite - Specification (OTD 0.6.7, PreTransform)
 
-Calibration Suite interpolates one error field from measured screen positions and pen orientations to correct display-tablet pointer errors. No separate position/tilt stages, fitted coefficients, or global solver.
+Calibration Suite calibrates display tablets only, by placing the physical pen tip on targets shown on the tablet screen. It interpolates one error field from measured screen positions and pen orientations to correct display-tablet pointer errors. No separate position/tilt stages, fitted coefficients, or global solver.
 
 ## 1. Components and OTD integration
 
@@ -20,7 +20,7 @@ OTD owns driver configuration and persistence; the Calibrator owns measurement a
 | Apply and persist calibration                                    | OTD Apply/Save, together with the rest of the selected settings                                      |
 | Back up, restore, or manually switch calibrations                | OTD settings Open/Save as and presets; these include the embedded filter property and other settings |
 | Reset this calibration                                           | Clear its property in OTD and Save; disable its checkbox for a temporary bypass                      |
-| Discover tablets, obtain settings, and acquire parsed reports    | Existing daemon RPC contracts and report types                                                       |
+| Discover the tablet, obtain geometry, and acquire parsed reports    | Existing daemon RPC contracts and report types                                                       |
 | Investigate plugin/runtime failures                              | OTD logs and existing diagnostics UI/export                                                          |
 | Guide measurements and review captures                    | Calibration-specific UI and shared core                                                              |
 
@@ -36,33 +36,31 @@ Subscribe directly to `DeviceReport`; enqueue reports for a serialized backgroun
 
 `SetTabletDebug(true)` makes `DeviceReader` reparse bytes into debug clones. `DebugReportData` contains `Tablet`, report-type `Path`, and serialized `Data`, with no hardware timestamp/sequence number. Use OTD reports, never OS cursor readings or another HID parser.
 
-Select via `GetTablets()`; match event `TabletReference` contents to the selection, not RPC object identity. Resolve the profile from returned settings using OTD's profile model. If payloads cannot distinguish devices, require only the intended device connected; they do not guarantee physical-unit identity.
+Connect automatically on startup and retry while OTD is unavailable. Require exactly one connected tablet via GetTablets(); use it automatically and display its name. With zero or multiple tablets, show instructions and disable Start. Match incoming TabletReference contents, not RPC object identity. Physical tablet/display association is the user's responsibility; do not build selectors, device registries, or monitor matching heuristics.
 
-Snapshot relevant applied settings and display geometry per session. Handle disconnects, `TabletsChanged`, and `Resynchronize`; poll `GetSettings()` periodically during capture and before starting and accepting each burst. Successful `SetSettings()` does not emit `Resynchronize` in 0.6.7. Cancel on observed selection, relevant settings, mapping, or display-geometry changes. Polling is best-effort, not an atomic lock: tell users to finish or cancel capture before changing OTD settings. Add no daemon patch or notification protocol.
+The Calibrator does not read OTD profiles or settings. It uses OTD for installation/plugin metadata, tablet geometry, and raw reports. Handle actual disconnects and TabletsChanged by stopping acquisition. Settings or Resynchronize alone do not invalidate measurements; do not poll GetSettings or inspect output modes, mappings, or filter order. Snapshot physical display geometry at Start; cancel on display geometry/DPI changes and use fresh geometry on the next Start.
 
-Debug enablement is daemon-global, without a state query/ownership token. Enable only for capture; disable on normal completion/cancellation and unsubscribe on disconnect. Concurrent OTD tablet-debugger use is unsupported; never promise to restore another client's state. Bound queues; cancel on overflow/stalls.
+Debug enablement is daemon-global, without a state query/ownership token. Enable only for explicitly started preview/capture; disable on completion/cancellation and unsubscribe on disconnect. Concurrent OTD debugger use is unsupported. Bound queues and cancel on overflow, stale queued work, or blocked processing. Ordinary pen absence is not a failed session: show Waiting for pen, hide stale live values, and preserve progress. During a capture burst, a report gap invalidates only that attempt; the user can retry.
 
 ### Mapping and pipeline
 
-Preflight requires `AbsoluteOutputMode`, full centered tablet input, zero input rotation, and output bounds matching the intended tablet display. Users configure OTD's area controls; never silently replace their mapping. Other mappings remain available afterward.
+The user moves the normal Calibrator window onto the physical tablet display and presses Start. Use the monitor containing the largest part of that window (nearest monitor if off-screen), then show an opaque, borderless full-screen preview covering the entire monitor, not its work area. No display dropdown, identifier overlays, or automatic tablet-to-display detection.
 
-Directly construct `OpenTabletDriver.Desktop.Output.AbsoluteMode`; set `Tablet`, `Input`, and `Output` from the selected tablet and applied profile. Use it only to read its public `TransformationMatrix`: its pointer remains uninjected. Never call report/output methods or construct it via the plugin service manager. The matrix supplies OTD's raw-to-mm scale, input-center translation, negative input rotation, input/output scale, and output-center translation. Add no custom output mode, protected-method adapter, or copied transform formula.
+Supported setup: the full active digitizer area corresponds to the full screen, with aligned X/right and Y/down axes. Non-display tablets and rotated, cropped, or otherwise mismatched digitizer/display arrangements are outside scope. Explain this setup; do not infer physical compatibility from a model name or aspect ratio.
 
-Use OTD's `DesktopInterop.VirtualScreen` / `IVirtualScreen.Displays` for geometry; exclude the virtual-screen entry from physical-display selection. One small platform/UI adapter converts OTD virtual-desktop pixels to Windows screen coordinates, then WPF window-local device-independent units, explicitly accounting for desktop origin and monitor DPI. Matrix output is not automatically a WPF screen coordinate. Windows/WPF display-change notifications must restart the session with refreshed geometry; OTD's cached list is not a live notification service. Do not duplicate its display-area editor or pointer injection.
+Target placement is independent of OTD cursor mapping. For a raw target (x,y), place the crosshair at (x / MaxX * viewportWidth, y / MaxY * viewportHeight) in full-screen WPF window-local units. Obtain monitor bounds from Windows; use per-monitor DPI awareness and WPF viewport dimensions. Negative desktop origins affect window placement only. Never construct an OTD output mode or inject a pointer for calibration.
 
-Calibration Suite requires unmodified parsed position/tilt, but may follow PreTransform filters that preserve both; it need not be first or the only enabled filter. Position/tilt modifiers must execute afterward. OTD preserves stored order within stages; PostTransform runs after Calibration Suite and OTD's transform.
+Ask users to disable other filters for a predictable, undistracting cursor and to aim with the physical nib, not the cursor. Raw debug reports precede filters, so other filters do not alter these measurements. The user is responsible for correct aiming and setup; keep measurable capture quality gates, not filter classification/enforcement.
 
-OTD 0.6.7's Filters UI sorts types by name and has no reorder control; toggling enablement does not reorder entries. Determine compatibility from applied stored order and known stages/behavior. Unknown behavior means unverified compatibility. Never infer execution order from the list, tell users to drag filters, rewrite `Filters`, or add an ordering workflow. For an enabled earlier PreTransform position/tilt modifier, ask the user to disable only that conflicting filter via its normal checkbox.
-
-Retain OTD's binding stage, transforms, clipping/limiting, bindings, and pointer injection. Capture uses raw debug reports and works with Calibration Suite absent or disabled. For manual end-to-end checks, temporarily disable other position-changing filters through OTD to isolate this correction, then restore them afterward.
+The installed correction filter still runs at PreTransform, retains OTD's binding/transform/clipping/output stages, and must receive unmodified parsed position/tilt. Document that position/tilt-changing filters must not precede it; leave filter configuration in OTD. Restore temporarily disabled filters after calibration as appropriate.
 
 ### Profiles and initialization
 
 Expose `CalibrationJson` with `[Property("Calibration data")]`, an empty-string default, and a paste/Save/clear-to-reset tooltip. OTD generates a text box and stores the string in the selected profile's `Filters` entry. No file-path property, custom property type/editor, or per-sample properties. The Calibrator copies JSON as an internal payload.
 
-OTD matches `Profile.Tablet` to `TabletReference.Properties.Name` and constructs filters from that profile. Reuse this for different configuration names; add no device registry, automatic switcher, or per-device files. Same-name tablets share a profile, with no automatic per-unit/per-pen switching. Display the selected profile prominently; use OTD settings/presets for manual switching. Require no serial numbers or duplicated model names in JSON.
+OTD matches Profile.Tablet to TabletReference.Properties.Name and constructs filters from that profile. The user chooses the destination profile when pasting. Same-name tablets share a profile, with no per-unit/per-pen switching. The Calibrator does not load, compare, manage, or select profiles; OTD settings/presets remain the durable storage workflow.
 
-Implement `IPositionedPipelineElement<IDeviceReport>` with a public parameterless constructor, plugin name, `Position`, `Consume`, and `Emit`. Obtain geometry via `[TabletReference]`; prepare caches in `[OnDependencyLoad]` after settings/tablet injection, never in the JSON setter. Settings activation creates a new filter; add no file watcher or hot-reload mechanism. Runtime requires exactly one enabled Calibration Suite entry in the selected profile. Diagnose missing, disabled, duplicate, or invalid entries; absence/disablement must not prevent calibration generation.
+Implement `IPositionedPipelineElement<IDeviceReport>` with a public parameterless constructor, plugin name, `Position`, `Consume`, and `Emit`. Obtain geometry via `[TabletReference]`; prepare caches in `[OnDependencyLoad]` after settings/tablet injection, never in the JSON setter. Settings activation creates a new filter; add no file watcher or hot-reload mechanism. Runtime requires exactly one enabled Calibration Suite entry in the selected profile. Document the single-entry requirement in OTD; do not inspect profile entries from the Calibrator. Filter absence/disablement does not prevent calibration generation.
 
 ## 2. Measurements, layout, and orientation
 
@@ -101,7 +99,7 @@ Add upright once per node; show total captures before starting. Require integer 
 
 ### Grid
 
-Use selected `Specifications.Digitizer.Width/Height` as `Wmm/Hmm` and `MaxX/MaxY` as `Wraw/Hraw`; require finite positive values. OTD's model has zero origin and no origin field. For inset `m`, require `0 < m < min(Wmm,Hmm)/2`:
+Use the detected tablet's `Specifications.Digitizer.Width/Height` as `Wmm/Hmm` and `MaxX/MaxY` as `Wraw/Hraw`; require finite positive values. OTD's model has zero origin and no origin field. For inset `m`, require `0 < m < min(Wmm,Hmm)/2`:
 
 ```text
 mx = m / Wmm * Wraw
@@ -133,9 +131,9 @@ Verify device axis semantics/signs in all four directions and upright; never ass
 
 ## 3. Capture, review, and UI
 
-Load compatible daemon-applied data from the selected profile as the **working calibration**; missing/empty means identity. Keep unfinished **capture sessions** and completed, structurally valid **candidates** separate. Working/review data stays in memory; OTD's saved profile is the durable source for later launches. Never silently replace pending data on refresh or tablet switch.
+Start with no accepted working calibration. Keep unfinished capture sessions, completed candidates, and accepted working data separately in memory for this app session. Do not read previously saved data from OTD, compare applied contents, or add calibration-file import/export. Closing the app loses these measurements unless the user has pasted and saved them in OTD.
 
-Completion offers `Accept Calibration`, `Recapture`, and `Discard`. Only acceptance replaces working data; cancellation/restart/discard preserves it. Targeted node/pose recapture preserves other samples and rebuilds affected geometry. Review and recapture are also available for loaded working calibration; edits become a candidate and replace working data only on acceptance. Review is for inspecting captures and correcting mistakes, without a separate accuracy-testing session or validated/unvalidated status.
+Completion offers Accept Calibration, Recapture, and Discard. Only acceptance replaces working data; cancellation/restart/discard preserves it. Targeted node/pose recapture preserves other samples and rebuilds affected geometry. Review and recapture apply to measurements created during this app session, not previously saved OTD data. This is measurement review, not an accuracy-validation session.
 
 Working calibration means the Calibrator's accepted in-memory dataset, not the correction currently running in OTD. Acceptance enables copying without applying/saving in OTD; state this beside the action. Accepted results remain session-only until saved in OTD; show pending status before closing. Use OTD presets for durable previous versions.
 
@@ -144,7 +142,7 @@ Working calibration means the Calibrator's accepted in-memory dataset, not the c
 1. `Space` starts one burst; suppress autorepeat/overlap.
 2. Require finite position and tilt in the same eligible pen report. Ignore unrelated auxiliary reports; reject out-of-range, reported proximity loss, and eraser input via available OTD interfaces. Never combine reports or reuse stale tilt. Pressure neither triggers capture nor requires a positive threshold.
 3. Gate every report without prediction/smoothing: upright altitude must be within tolerance of 90; other poses require altitude and circular azimuth within tolerance. Any gate failure discards the attempt.
-4. Collect until **both** duration and sample minima are met, within gap/total timeouts. Use a monotonic local clock; count each event once, including identical repeats. Without hardware timestamps/sequences, some upstream loss is undetectable. Cancel on disconnects/stalls with a retry message.
+4. Collect until **both** duration and sample minima are met, within gap/total timeouts. Use a monotonic local clock; count each event once, including identical repeats. Without hardware timestamps/sequences, some upstream loss is undetectable. A report gap during a burst rejects that burst with a retry message; pen absence between bursts preserves progress. Actual disconnects or blocked processing stop acquisition.
 5. Compute component-wise position X/Y and tilt X/Y medians over the same burst; average the middle two for even counts. For each report, compute Euclidean distances from median position (convert each displacement axis independently to mm) and median tilt (raw degrees). Sort each list; the 95th percentile is one-based rank `ceil(0.95 * count)`. Reject if either stability limit is exceeded; never accept by trimming outliers.
 6. Store median position/tilt, which represent the burst but need not match an individual report. Never substitute requested poses or use linear medians of wrapped azimuth as interpolation coordinates.
 
@@ -161,11 +159,11 @@ The opaque full-screen WPF window must remain responsive during pen contact and 
 | R         | Restart unfinished session                      |
 | Esc       | Cancel and return to main screen                |
 
-Main screen shows selected tablet/profile, Default/Calibrated state, candidate state, filter configuration presence/enablement, and OTD applied-data status (Matches working calibration/Pending changes). Measured data is Calibrated even with zero errors; Default means identity/missing data. Invalid/unsupported data is an error. All are read-only observations.
+Main screen shows automatic connection readiness, the single tablet name, and session/candidate/accepted-data state. It does not show profile/display selectors, filter status, Default/Calibrated classification of OTD data, or applied/saved/runtime status.
 
-Main actions: `Calibrate`, `Review Calibration`, `Copy Calibration`, and `Refresh from OTD`. Review opens existing measured captures for targeted recapture; identity data requires a new calibration. Copy uses accepted working data and instructs users to paste into OTD's **Calibration data** field and Save. Refresh reads settings and updates status; replacing pending working data with OTD data requires explicit choice. Switching tablets with pending data requires an explicit choice to finish or discard it.
+Main actions: Calibrate, Review Calibration, and Copy Calibration. In milestone 1 only, label the entry Start preview because measurements are not yet captured. Connect automatically without a Connect/Refresh button. Review opens current-session measurements; Copy uses accepted data and instructs the user to paste into the intended OTD profile's Calibration data field and Save.
 
-Use section 1's OTD workflows for reset, enable/disable, backup/restore, and presets. Add no Calibrator calibration-file Import/Export, Reset Working Calibration, or Apply/Save buttons. Validate loaded OTD settings/preset data with the same core checks as new captures.
+Use OTD for reset, enable/disable, backup/restore, and presets. Add no Calibrator Import/Export, Reset Working Calibration, or Apply/Save actions. Runtime filter loading still validates persisted calibration through the shared core.
 
 ## 4. Interpolation and runtime
 
@@ -225,7 +223,7 @@ Version 2 replaces version 1's position field/fitted coefficients with measured 
 - Derive targets from row/column coordinates and errors as `position - target`; never persist redundant authoritative errors.
 - Compare all four `sourceGeometry` fields to injected OTD geometry with relative tolerance `1e-6`. Mismatches require recalibration, never rescaling. This guards configuration changes/incompatible pastes; matching geometry neither proves tablet/pen equivalence nor replaces OTD profile selection.
 
-The Calibrator writes guidance, e.g. `"requestedPose": { "altitudeDeg": 70, "azimuthDeg": 90 }`: altitude in `(0, 90]`, non-upright azimuth in `[0, 360)`, upright azimuth omitted. Loaded samples may omit it; derive their targeted-recapture guidance from measured orientation. Within upright angle tolerance, request upright without an azimuth gate. This affects only the new capture, never existing measurements/classification; replace measurements only on acceptance. Runtime ignores guidance; generation preferences stay local.
+The Calibrator writes guidance, e.g. `"requestedPose": { "altitudeDeg": 70, "azimuthDeg": 90 }`: altitude in `(0, 90]`, non-upright azimuth in `[0, 360)`, upright azimuth omitted. Runtime-loaded samples may omit it; the Calibrator reviews only current-session measurements. Within upright angle tolerance, request upright without an azimuth gate. This affects only the new capture, never existing measurements/classification; replace measurements only on acceptance. Runtime ignores guidance; generation preferences stay local.
 
 Illustrative 2x2 document: fictional 100 x 100 mm, 1000 x 1000 raw digitizer, 15 mm inset, fewer poses than default. Do not reuse as calibration:
 
@@ -295,7 +293,7 @@ Identity requires no grid, geometry, or samples:
 { "format": "CalibrationSuite", "version": 2, "mode": "identity" }
 ```
 
-Before activation, validate schema, geometry compatibility, dimensions, and sample meshes. Invalid/unsupported data yields identity behavior with OTD-log/Calibrator diagnostics, never a successful Default label. Version 1 requires recalibration: preserve its JSON until replacement/reset; never fabricate captures from coefficients.
+In the runtime filter, before activation, validate schema, geometry compatibility, dimensions, and sample meshes. Invalid/unsupported data yields identity behavior with OTD-log diagnostics. Version 1 requires recalibration: preserve its JSON until replacement/reset; never fabricate captures from coefficients.
 
 ### Applying, saving, and status
 
@@ -303,15 +301,15 @@ Copy accepted working data as complete compact single-line JSON to the clipboard
 
 Section 1's clear-and-Save workflow resets only this calibration to identity; the enable checkbox bypasses correction while retaining data. OTD settings Open/Save as and presets preserve embedded calibration for backup/restore/manual switching, but affect the whole settings document. Preset selection/application does not prove a disk save. Add no separate calibration-file workflow.
 
-Calibrator configuration access is read-only: never call `SetSettings`, edit OTD settings files, or use global `ResetSettings` for calibration reset. Its only daemon mutation is temporary `SetTabletDebug` acquisition. Keep configuration/persistence changes in OTD's UI.
+The Calibrator never calls GetSettings, SetSettings, or ResetSettings and never reads or writes OTD settings files. Its only daemon mutation is temporary SetTabletDebug acquisition. Leave configuration/persistence and destination-profile choice in OTD.
 
-`Refresh from OTD` compares decoded daemon-applied `GetSettings()` calibration content, ignoring whitespace/object-property order but retaining array order; missing/empty equals explicit identity. Copying changes no status. A match does not prove disk persistence or filter construction/execution, or reflect unsaved UX edits: OTD can retain settings for a plugin that failed to construct. Show a Save-in-OTD reminder; distinguish configuration observations from runtime evidence. Use OTD logs/diagnostics for runtime failures; add no parallel log viewer or claim of a nonexistent runtime-health API. Preserve pending working data unless explicitly replaced (section 3).
+Copying changes no OTD settings. Show a paste-and-Save reminder without claiming that the result was applied, saved, or executed. Use OTD logs for runtime failures. Do not add applied-content comparison or a parallel log viewer.
 
 ## 6. Verification and deferred accuracy testing
 
 The initial release includes capture quality gates, structural data validation, automated correction tests, and manual device/integration checks. It does not include guided accuracy-validation sessions, generated test targets/poses, before/after error reports, comparison against previous calibration, or validation-result tracking and skip actions. These are deferred and do not block initial delivery.
 
-After accepting, copying, and saving calibration in OTD, users try actual cursor behavior and can return to the Calibrator to review/recapture mistakes. Acceptance confirms the dataset to copy; it does not certify physical accuracy. Manual device checks should cover positions and orientations between captures and near coverage boundaries, with correction enabled and bypassed. Record observed behavior and limitations without inventing an accuracy threshold.
+After accepting, copying, and saving calibration in OTD, users try actual cursor behavior and can return to the still-open Calibrator to review/recapture current-session measurements. After closing the Calibrator, a new capture is required. Acceptance confirms the dataset to copy; it does not certify physical accuracy. Manual device checks should cover positions and orientations between captures and near coverage boundaries, with correction enabled and bypassed. Record observed behavior and limitations without inventing an accuracy threshold.
 
 A future guided accuracy-testing feature may reuse acquisition and the shared evaluator to compare raw, candidate, and previous correction on identical held-out reports. Its detailed workflow and defaults require a separate specification before implementation. Do not build placeholder UI or validation state for it now.
 
@@ -320,7 +318,7 @@ A future guided accuracy-testing feature may reuse acquisition and the shared ev
 | Checks               | Coverage                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Math/data            | Exact node tilt-vertex reproduction within numeric tolerance; combined spatial residuals including large offsets/gradients; triangle/grid continuity; hull clamping; upright and circular azimuth/signs; identity, geometry mismatches, malformed data, version 1 rejection                                                                                                                                                                                                |
-| Workflow/integration | Candidate accept/discard and session-only pending data; OTD Plugin Manager, generated property paste/clear, enable checkbox, Save/Apply, settings/presets round-trip; filter stage/stored-order compatibility, including harmless earlier filters, conflicting earlier filters, and downstream filters; report reconstruction/interfaces/events; applied vs saved vs runtime status; settings-change detection; monitor DPI/offsets; sampling/rendering during pen contact |
+| Workflow/integration | Candidate accept/discard and session-only pending data; OTD Plugin Manager, generated property paste/clear, enable checkbox, Save/Apply, settings/presets round-trip; filter PreTransform stage and documented ordering responsibilities; report reconstruction/interfaces/events; automatic connection, single-tablet detection, and pen absence/resumption; monitor DPI/offsets; sampling/rendering during pen contact |
 | Device               | Orientation semantics, capture defaults, held-out positional/tilt accuracy; mathematical tests alone do not establish hardware accuracy                                                                                                                                                                                                                                                                                                                                    |
 
 ## 7. OTD source references
@@ -341,5 +339,5 @@ Use the adjacent `Sample Plugins` tree as a source of examples and ideas, includ
 | Filter selection/ordering limitations       | `OpenTabletDriver.UX/Controls/PluginSettingStoreCollectionEditor.cs`; `OpenTabletDriver.Desktop/Reflection/PluginSettingStoreCollection.cs` (`FromType`)                                                                                                                                                        |
 | Plugin installation and UI extension limits | `OpenTabletDriver.UX/Windows/Plugins/PluginManagerWindow.cs`; `OpenTabletDriver.UX/Controls/PluginSettingStoreEditor.cs`; `OpenTabletDriver.Plugin/Attributes/ActionAttribute.cs`                                                                                                                               |
 | Existing client/type initialization         | `OpenTabletDriver.UX/MainForm.cs` (`HandleDaemonConnected`); `OpenTabletDriver.Desktop/Reflection/DesktopPluginManager.cs`; `OpenTabletDriver.Desktop/RPC/DebugReportData.cs` (`ToObject`); `OpenTabletDriver.Console/Program.IPC.cs`; `Directory.Build.props`                                                  |
-| Public mapping/display reuse                | `OpenTabletDriver.Desktop/Output/AbsoluteMode.cs`; `OpenTabletDriver.Desktop/Interop/DesktopInterop.cs`; `OpenTabletDriver.Desktop/Interop/Display/WindowsDisplay.cs`; `OpenTabletDriver.UX/Controls/Output/AbsoluteModeEditor.cs`; `OpenTabletDriver.Desktop/Interop/Input/Absolute/WindowsAbsolutePointer.cs` |
+| OTD cursor mapping/display (reference only)                | `OpenTabletDriver.Desktop/Output/AbsoluteMode.cs`; `OpenTabletDriver.Desktop/Interop/DesktopInterop.cs`; `OpenTabletDriver.Desktop/Interop/Display/WindowsDisplay.cs`; `OpenTabletDriver.UX/Controls/Output/AbsoluteModeEditor.cs`; `OpenTabletDriver.Desktop/Interop/Input/Absolute/WindowsAbsolutePointer.cs` |
 | Backup/restore/presets                      | `OpenTabletDriver.UX/MainForm.cs` (`LoadSettingsDialog`, `SaveSettingsDialog`, `SavePresetDialog`, `PresetButtonHandler`); `OpenTabletDriver.Desktop/PresetManager.cs`                                                                                                                                          |

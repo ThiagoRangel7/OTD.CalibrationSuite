@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="../CalibrationSuite.Core/CalibrationSuite.Core.csproj" />
+    <ProjectReference Include="$(OtdSource)/OpenTabletDriver.Plugin/OpenTabletDriver.Plugin.csproj" Private="false" />
+  </ItemGroup>
+</Project>
