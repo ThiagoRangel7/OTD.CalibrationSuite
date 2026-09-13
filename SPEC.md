@@ -95,7 +95,7 @@ azimuth[k]  = 360 * k / A              k = 0..A-1
 captures   = R * C * (1 + A * N)      default: 153
 ```
 
-Add upright once per node; show total captures before starting. Require integer counts (`R,C >= 2`, `A >= 3`, `N >= 1`), positive sampling/stability parameters, `CaptureTimeoutMs > CaptureWindowMs`, `0 < M < 90`, and altitude/azimuth spacing greater than twice the angle tolerance. Verify usable varying tilt: `ITiltReport` declares no attainable range. Explain rejection of incompatible settings or inadequate orientation coverage.
+Add upright once per node; show total captures before starting. Require integer counts (`R,C >= 2`, `A,N >= 0`; when both are positive, `A >= 3`), positive sampling/stability parameters, `CaptureTimeoutMs > CaptureWindowMs`, `0 < M < 90`, and, when capturing non-upright poses, altitude/azimuth spacing greater than twice the angle tolerance. If either A or N is zero, capture only upright at each target (R*C captures); skip non-upright pose generation and spacing checks. Verify usable varying tilt for full tilt calibration: `ITiltReport` declares no attainable range. Explain rejection of incompatible settings or inadequate orientation coverage.
 
 ### Grid
 
@@ -167,6 +167,16 @@ Use OTD for reset, enable/disable, backup/restore, and presets. Add no Calibrato
 
 ## 4. Interpolation and runtime
 
+### Interpolation decision
+
+Retain triangles over actual measured `(TiltX, TiltY)` for tilt correction, and bilinear blending across screen targets. Requested azimuth/altitude poses guide the user; they do not replace measured coordinates or determine mesh connectivity. Capture order does not affect the resulting correction.
+
+The requested rings suggest triangles around upright and quads between rings, but accepted measurements need not form regular rings. Measured-tilt triangulation handles these variations and upright with one evaluation rule. Retain the library and its existing preparation checks; switching to quads or restricting spatial grids is not justified merely to save a few lines.
+
+This is a practical design choice, not a claim that triangles are more accurate. Triangle interpolation reproduces vertex errors and is continuous, but its slope can change at edges and the chosen diagonal can affect intermediate estimates. Quads can produce different estimates and are not automatically more accurate. Reconsider interpolation only with a reasoned comparison using the same measured inputs and additional held-out measurements. Such a comparison does not add a guided accuracy-testing feature to the initial release.
+
+Capture gates do not eliminate runtime boundary handling: users can draw beyond recorded tilt coverage, and polygonal rings can exclude intermediate directions even at an otherwise captured lean. Keep nearest-boundary clamping. Preserve correction variation across both screen position and tilt.
+
 ### Within a node
 
 Triangulate measured `(TiltX,TiltY)` points, initially using Delaunay. This interpolator belongs in the shared core; OTD settings/pipeline APIs do not provide it. Use a compatible geometry library with robust predicates and deterministic behavior, not a new triangulation engine. Measurements are authoritative; build derived mesh/lookup caches at node completion/load. Inside each triangle, blend vertex errors barycentrically:
@@ -178,13 +188,15 @@ w0 + w1 + w2 = 1
 
 This reproduces vertex errors and is continuous across shared edges. Evaluate relevant nodes' independent meshes/boundaries at current raw tilt, including upright without a special branch. Alternative orientation coordinates change intermediate results and require documented justification and validation.
 
-Reject new captures within 0.1 degree Euclidean tilt distance of another sample and request recapture. Node completion requires a usable nondegenerate mesh with captured upright strictly inside its hull; identify failing poses before advancing.
+Reject new captures within 0.1 degree Euclidean tilt distance of another sample and request recapture. For multi-sample nodes, completion requires a usable nondegenerate mesh with captured upright strictly inside its hull; identify failing poses before advancing.
 
-Every mesh, including OTD-loaded data, must contain `(0, 0)` strictly inside its hull, surrounding vertical. Loaded data need not identify an upright sample: validate measured geometry, not guidance metadata. This check neither creates an origin sample nor moves recorded points.
+Every multi-sample mesh, including OTD-loaded data, must contain `(0, 0)` strictly inside its hull, surrounding vertical. Loaded data need not identify an upright sample: validate measured geometry, not guidance metadata. This check neither creates an origin sample nor moves recorded points.
 
 Sort vertices lexicographically by measured `(TiltX, TiltY)` before triangulation; resolve ties deterministically so sample reordering cannot change correction. Use robust predicates and retain distinct samples; interior collinearity/cocircular rings are not inherently invalid. Never jitter vertices or invent errors; clearly reject unusable loaded geometry.
 
 Outside each node's convex hull, project to the nearest boundary point by raw tilt-coordinate distance and interpolate there. Never extrapolate or modify report tilt. Polygonal rings can clamp near the altitude limit even within the requested range; validate this separately.
+
+A node with exactly one finite measured sample represents upright-only calibration: `nodeError(t) = sample.position - target` for any usable tilt. Retain its actual measured tilt; do not force it to zero. It requires no triangles or hull-coverage check. Capture completion still identifies that sample as upright, with pose eligibility enforced by the capture workflow. Loading does not infer upright from raw signs or requested-pose metadata. Zero, two, or three samples are invalid, not a fallback to constant correction.
 
 ### Across nodes
 
@@ -219,7 +231,7 @@ Version 2 replaces version 1's position field/fitted coefficients with measured 
 | Sample `requestedPose`               | Optional capture guidance in degrees; never interpolation coordinates                   |
 
 - Names/enum strings are case-sensitive; numbers finite; versions/counts integers. Ignore unknown optional properties only in supported versions; reject unknown versions/modes.
-- Grid lines strictly increase within raw digitizer bounds, with at least two rows/columns and exactly matching `nodes` dimensions. Require at least four distinct samples/node and usable geometry (section 4). Allow nonuniform grids/differing sample counts.
+- Grid lines strictly increase within raw digitizer bounds, with at least two rows/columns and exactly matching `nodes` dimensions. Require exactly one finite sample per constant-error node, or at least four distinct samples and usable geometry per tilt-dependent node (section 4). Keep version 2 measured mode and the existing sample schema: sample count determines evaluation, with no new flag. Allow nonuniform grids/differing sample counts, including constant and triangulated nodes in the same dataset; evaluate each independently before spatial blending.
 - Derive targets from row/column coordinates and errors as `position - target`; never persist redundant authoritative errors.
 - Compare all four `sourceGeometry` fields to injected OTD geometry with relative tolerance `1e-6`. Mismatches require recalibration, never rescaling. This guards configuration changes/incompatible pastes; matching geometry neither proves tablet/pen equivalence nor replaces OTD profile selection.
 

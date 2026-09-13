@@ -1,6 +1,6 @@
 # Calibration Suite
 
-A Windows calibrator for **display tablets**, using raw pen position and tilt from OTD 0.6.7. Milestone 1 currently provides a full-screen target/readings preview; capture, review, copying, and correction arrive in later milestones.
+A Windows calibrator for **display tablets**, using raw pen position and tilt from OTD 0.6.7. The app currently provides a full-screen target/readings preview. Milestone 2 adds the shared data and correction core; applying correction in the OTD filter, capture, review, and copying arrive in later milestones.
 
 ## Run
 
@@ -42,6 +42,14 @@ Remove-Item Env:CALIBRATION_LIVE_OTD
 ~~~
 
 Run it under the same Windows user as OTD. See [milestone evidence and device checks](docs/MILESTONE1.md) and [dependencies](docs/DEPENDENCIES.md).
+
+## Review the correction core
+
+Start with [milestone 2 examples and checks](docs/MILESTONE2.md). The core has no WPF or OTD dependency: `CalibrationData` handles version 2 JSON, `CaptureSettings` resolves grid/poses, `NodeMesh` interpolates measured tilt errors, and `PreparedCalibration` combines four nodes to correct raw position. Loading invalid or legacy data returns identity with a diagnostic; no original JSON is rewritten. Preparing copies evaluator inputs so subsequent edits cannot affect a running snapshot.
+
+The core also supports upright-only calibration: zero azimuths or zero non-upright levels produces one pose per target. A single sample supplies a constant error at that target, blended across the screen using the same formula. Its UI controls arrive with capture in milestone 4.
+
+The automated suite covers these mathematical and data rules using fictional measurements. It does not establish physical accuracy. The visible app remains a preview and the filter remains pass-through.
 
 ## Intended completed workflow
 

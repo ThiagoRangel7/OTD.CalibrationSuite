@@ -1,6 +1,6 @@
 # Milestone 1 review — 2026-09-13
 
-**Awaiting user review.** The user explicitly approved implementing the simplified display-tablet workflow. SPEC.md and PLAN.md have been revised accordingly. This changes milestone 1 and removes future profile-management requirements; it does not authorize implementing milestone 2.
+**Approved to advance.** After reviewing the simplified workflow, the user explicitly requested "Implement milestone 2" on 2026-09-13. This records approval to advance, not completion of the physical checks below. The following implementation and validation evidence describes milestone 1; see [milestone 2](MILESTONE2.md) for subsequent core work.
 
 ## Implemented behavior
 
@@ -63,4 +63,4 @@ dotnet run --project src/CalibrationSuite.Calibrator -c Release --no-build --no-
 
 Exact HidSharpCore package notice verification and final dependency distribution remain pending for delivery. SPEC.md retains mathematical validation/capture-quality requirements and excludes guided accuracy-testing UI.
 
-**Paused at the milestone 1 review gate.** No milestone 2 work has begun.
+Milestone 1's physical/device checks remain pending and are carried into milestone 2's review record.

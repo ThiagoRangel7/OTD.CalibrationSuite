@@ -116,6 +116,11 @@
           "System.IO.Pipelines": "8.0.0"
         }
       },
+      "NetTopologySuite": {
+        "type": "Transitive",
+        "resolved": "2.6.0",
+        "contentHash": "1B1OTacTd4QtFyBeuIOcThwSSLUdRZU3bSFIwM8vk36XiZlBMi3K36u74e4OqwwHRHUuJC1PhbDx4hyI266X1Q=="
+      },
       "Newtonsoft.Json": {
         "type": "Transitive",
         "resolved": "13.0.4",
@@ -218,7 +223,10 @@
         }
       },
       "calibrationsuite.core": {
-        "type": "Project"
+        "type": "Project",
+        "dependencies": {
+          "NetTopologySuite": "[2.6.0, )"
+        }
       },
       "calibrationsuite.filter": {
         "type": "Project",

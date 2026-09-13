@@ -89,6 +89,15 @@ Implement:
 
 **Outcome:** complete calibration capture, review/recapture, acceptance, and copying into OTD.
 
+### Capture follow-ups from milestone 2 review
+
+Retain the full tilt interpolation approach following the 2026-09-13 discussion. The upright-only core extension is complete; carry the remaining UI and capture items forward as marked below:
+
+- **Requested capture order:** upright, then all altitude levels for azimuth 1, all levels for azimuth 2, and so on, before the next crosshair. Update the spec traversal sentence, CreatePoses, and order tests together when implementing capture. This changes guidance order only, not mesh construction.
+- **Upright-only core implemented in milestone 2:** zero non-upright altitude levels or zero azimuths generate only upright. A single measured sample supplies a constant node error through the existing spatial blend and version 2 schema; multi-sample nodes keep their mesh checks. Tests cover loading, evaluation, invalid counts/data, and mixed nodes. Expose the controls and enforce upright pose capture in milestone 4.
+- **Confirmed burst acceptance:** retain the current spec: every eligible report must satisfy pose tolerance, followed by burst medians and position/tilt stability checks. Keep gap/duration/sample limits. The proposed median-only pose gate was declined.
+- **Presentation idea for later evaluation:** an arrow continuing from the pen tip toward a target point/sphere. Work out depth readability and explicitly reconcile its eraser-to-tip direction with the spec's tip-to-eraser azimuth convention. No 3D UI or rendering dependency is committed by this note.
+
 Implement:
 
 - Capture settings/defaults, total-count preview, traversal order, active-target display, and verified angle guidance/gates.
@@ -140,10 +149,10 @@ States: Not started → In progress → Awaiting user review → Approved. Revie
 
 | Milestone | State | Evidence / findings | User approval |
 | --- | --- | --- | --- |
-| 1: Build, acquisition, mapping | Awaiting user review | Approved simpler workflow implemented; clean Release build, 25 synthetic tests, installed-daemon read-only detection passed. See docs/MILESTONE1.md for commands and pending device/UI checks. | User explicitly authorized the workflow revision and implementation on 2026-09-13; milestone 2 not approved. |
-| 2: Data and correction core | Not started | — | — |
+| 1: Build, acquisition, mapping | Approved | Simplified workflow implemented; 25 synthetic tests and read-only device detection passed at that milestone. Physical/UI checks in docs/MILESTONE1.md remain pending and are carried forward. | User explicitly requested "Implement milestone 2" on 2026-09-13. Approval to advance is not device verification. |
+| 2: Data and correction core | Awaiting user review | Version 2 data, layout, immutable measured meshes, and correction evaluator implemented. Locked restore, Release build, and 98 synthetic tests passed. See docs/MILESTONE2.md. | Implementation explicitly requested on 2026-09-13; milestone 3 not approved. |
 | 3: Filter and package | Not started | — | — |
 | 4: Capture and review | Not started | — | — |
 | 5: Audit and delivery | Not started | — | — |
 
-Current stop: reviewing the explicitly approved 2026-09-13 simplified display-tablet workflow within milestone 1. No approval to advance to milestone 2. See docs/MILESTONE1.md for current evidence and pending physical-device checks.
+Current stop: milestone 2 review. No approval to advance to milestone 3. See docs/MILESTONE2.md for core verification and carried-forward physical-device checks.
