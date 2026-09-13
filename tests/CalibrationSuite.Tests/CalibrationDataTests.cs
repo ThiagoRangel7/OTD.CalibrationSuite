@@ -19,13 +19,13 @@ public class CalibrationDataTests
         var roundTrip = CalibrationData.Parse(json);
         Assert.Equal(data.Nodes[0][0].Samples[2], roundTrip.Nodes![0][0].Samples[2]);
         Assert.False(PreparedCalibration.Prepare(roundTrip, Geometry).IsIdentity);
-        Assert.Equal("{\"format\":\"CalibrationSuite\",\"version\":2,\"mode\":\"identity\"}", CalibrationData.Identity.ToJson());
+        Assert.Equal("{\"mode\":\"identity\"}", CalibrationData.Identity.ToJson());
     }
 
     [Theory]
     [InlineData("")]
     [InlineData(" ")]
-    [InlineData("{\"format\":\"CalibrationSuite\",\"version\":2,\"mode\":\"identity\"}")]
+    [InlineData("{\"mode\":\"identity\"}")]
     public void EmptyAndIdentityDataArePassThrough(string json)
     {
         var prepared = PreparedCalibration.Load(json, Geometry, out var diagnostic);
@@ -38,26 +38,12 @@ public class CalibrationDataTests
     [InlineData("[]")]
     [InlineData("{")]
     [InlineData("{}")]
-    [InlineData("{\"version\":\"2\"}")]
-    [InlineData("{\"format\":\"CalibrationSuite\",\"version\":2.5,\"mode\":\"identity\"}")]
-    [InlineData("{\"format\":\"CalibrationSuite\",\"version\":3,\"mode\":\"identity\"}")]
-    [InlineData("{\"format\":\"calibrationsuite\",\"version\":2,\"mode\":\"identity\"}")]
-    [InlineData("{\"Format\":\"CalibrationSuite\",\"version\":2,\"mode\":\"identity\"}")]
-    [InlineData("{\"format\":\"CalibrationSuite\",\"version\":2,\"mode\":\"Measured\"}")]
-    [InlineData("{\"format\":\"CalibrationSuite\",\"version\":2,\"mode\":\"measured\"}")]
+    [InlineData("{\"mode\":\"Measured\"}")]
+    [InlineData("{\"mode\":\"measured\"}")]
     public void MalformedOrUnsupportedDataFallsBackWithDiagnostic(string json)
     {
         Assert.True(PreparedCalibration.Load(json, Geometry, out var diagnostic).IsIdentity);
         Assert.False(string.IsNullOrWhiteSpace(diagnostic));
-    }
-
-    [Fact]
-    public void LegacyDataIsRejectedWithoutRewritingIt()
-    {
-        const string original = "{\"version\":1,\"coefficients\":[1,2,3]}";
-        Assert.True(PreparedCalibration.Load(original, Geometry, out var diagnostic).IsIdentity);
-        Assert.Contains("Version 1 requires recalibration", diagnostic);
-        Assert.Equal("{\"version\":1,\"coefficients\":[1,2,3]}", original);
     }
 
     [Theory]

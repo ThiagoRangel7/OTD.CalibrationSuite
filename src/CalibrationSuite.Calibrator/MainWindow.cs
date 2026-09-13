@@ -15,9 +15,7 @@ public sealed class MainWindow : Window
     private readonly Button start = new() { Content = "Start preview", IsEnabled = false };
     private readonly CancellationTokenSource lifetime = new();
     private AcquisitionSession? session;
-    private Task<string>? running;
-    private PreviewWindow? preview;
-    private bool busy, restartRequired;
+    private bool running, restartRequired;
 
     public MainWindow()
     {
@@ -32,7 +30,14 @@ public sealed class MainWindow : Window
         panel.Children.Add(tabletName); panel.Children.Add(start); panel.Children.Add(status);
         Content = new ScrollViewer { Content = panel };
         Loaded += async (_, _) => await MonitorTabletAsync();
-        start.Click += async (_, _) => await StartAsync();
+        start.Click += async (_, _) =>
+        {
+            if (running || restartRequired || lifetime.IsCancellationRequested) return;
+            running = true;
+            await StartAsync();
+            running = false;
+            if (lifetime.IsCancellationRequested) Close();
+        };
         SystemEvents.DisplaySettingsChanged += OnDisplayChanged;
         Closing += OnClosing;
         Closed += (_, _) => SystemEvents.DisplaySettingsChanged -= OnDisplayChanged;
@@ -42,17 +47,17 @@ public sealed class MainWindow : Window
     {
         while (!lifetime.IsCancellationRequested)
         {
-            if (!busy && !restartRequired)
+            if (!running && !restartRequired)
             {
                 try
                 {
                     await daemon.Connect().WaitAsync(TimeSpan.FromSeconds(3), lifetime.Token);
                     var tablet = TabletSelection.Single(await daemon.GetTablets().WaitAsync(TimeSpan.FromSeconds(3), lifetime.Token));
-                    if (!busy && !restartRequired && !lifetime.IsCancellationRequested) { tabletName.Text = tablet.Properties.Name; start.IsEnabled = true; }
+                    if (!running && !restartRequired && !lifetime.IsCancellationRequested) { tabletName.Text = tablet.Properties.Name; start.IsEnabled = true; }
                 }
                 catch (Exception ex)
                 {
-                    if (!busy) { tabletName.Text = $"Start OTD and connect your display tablet. {ex.Message}"; start.IsEnabled = false; }
+                    if (!running) { tabletName.Text = $"Start OTD and connect your display tablet. {ex.Message}"; start.IsEnabled = false; }
                 }
             }
             try { await Task.Delay(1000, lifetime.Token); }
@@ -62,8 +67,8 @@ public sealed class MainWindow : Window
 
     private async Task StartAsync()
     {
-        if (busy || restartRequired || lifetime.IsCancellationRequested) return;
-        busy = true; start.IsEnabled = false;
+        start.IsEnabled = false;
+        PreviewWindow? preview = null;
         try
         {
             var tablet = TabletSelection.Single(await daemon.GetTablets().WaitAsync(TimeSpan.FromSeconds(3), lifetime.Token));
@@ -73,30 +78,22 @@ public sealed class MainWindow : Window
             preview = new(session, tablet, display) { Owner = this };
             preview.GeometryChanged += CancelForDisplayChange;
             preview.Show();
-            running = Task.Run(session.RunAsync);
-            status.Text = await running;
-            restartRequired = !session.CleanupConfirmed || !session.WorkerStopped;
-            if (restartRequired) status.Text += " Restart OTD and Calibrator before retrying.";
+            status.Text = await session.RunAsync();
+            restartRequired = session.RestartRequired;
         }
         catch (Exception ex) { status.Text = ex.Message; }
-        finally { preview?.Close(); preview = null; session = null; running = null; busy = false; }
+        finally { preview?.Close(); session = null; }
     }
 
     private void OnDisplayChanged(object? sender, EventArgs e) => Dispatcher.BeginInvoke(CancelForDisplayChange);
 
-    private void CancelForDisplayChange()
-    {
+    private void CancelForDisplayChange() =>
         session?.Cancel("Display geometry/DPI changed. Move this window to the tablet screen and start again.");
-        preview?.Close();
-    }
 
-    private async void OnClosing(object? sender, CancelEventArgs e)
+    private void OnClosing(object? sender, CancelEventArgs e)
     {
-        if (running == null) { lifetime.Cancel(); return; }
-        e.Cancel = true;
-        if (lifetime.IsCancellationRequested) return;
-        lifetime.Cancel(); session?.Cancel(); preview?.Close();
-        await running;
-        running = null; Close();
+        e.Cancel = running;
+        lifetime.Cancel();
+        session?.Cancel();
     }
 }

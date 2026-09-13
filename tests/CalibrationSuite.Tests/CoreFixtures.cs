@@ -19,7 +19,7 @@ internal static class CoreFixtures
         rows ??= [150, 850]; columns ??= [150, 850];
         return new()
         {
-            Format = "CalibrationSuite", Version = 2, Mode = "measured", SourceGeometry = Geometry,
+            Mode = "measured", SourceGeometry = Geometry,
             Grid = new(rows, columns),
             Nodes = rows.Select(y => columns.Select(x =>
                 new CalibrationNode(Samples(new(x, y), t => error(new(x, y), t)))).ToArray()).ToArray()

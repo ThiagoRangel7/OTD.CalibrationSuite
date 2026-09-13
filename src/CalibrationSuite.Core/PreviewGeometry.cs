@@ -8,13 +8,9 @@ public static class PreviewGeometry
 
     public static Vector2[] Targets(float widthMm, float heightMm, float maxX, float maxY)
     {
-        try
-        {
-            var grid = new CaptureSettings().CreateGrid(new(maxX, maxY, widthMm, heightMm));
-            return grid.PreTransformRowCoordinates.SelectMany(y => grid.PreTransformColumnCoordinates
-                .Select(x => new Vector2((float)x, (float)y))).ToArray();
-        }
-        catch (CalibrationException ex) { throw new InvalidOperationException(ex.Message, ex); }
+        var grid = new CaptureSettings().CreateGrid(new(maxX, maxY, widthMm, heightMm));
+        return grid.PreTransformRowCoordinates.SelectMany(y => grid.PreTransformColumnCoordinates
+            .Select(x => new Vector2((float)x, (float)y))).ToArray();
     }
 
     // The full digitizer covers the full preview. WPF supplies viewport dimensions in DIPs.

@@ -40,7 +40,6 @@ public class RpcTests
         var synthetic = new SyntheticRpcDaemon();
         rpc.AddLocalRpcTarget(synthetic); rpc.StartListening();
         await connect.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.True(connection.Ready);
         Assert.Contains(AppInfo.PluginManager.PluginTypes, t => t.FullName == typeof(TiltTabletReport).FullName);
         var tablet = Assert.Single(await connection.GetTablets());
         Assert.NotSame(synthetic.Tablet, tablet);
@@ -53,7 +52,7 @@ public class RpcTests
         var reading = await received.Task.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(321u, reading.Pressure);
         session.Cancel(); await run.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.True(session.CleanupConfirmed);
+        Assert.False(session.RestartRequired);
         Assert.Equal(new[] { true, false }, synthetic.DebugCalls);
     }
 }

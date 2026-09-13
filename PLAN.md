@@ -2,15 +2,11 @@
 
 ## Authority and execution rules
 
-`SPEC.md` governs requirements, formulas, defaults, and exclusions; this plan defines implementation order and review gates. Read the current spec before starting/resuming. Do not change it to suit implementation; revise it only for explicitly authorized requirement changes, such as the simplified display-tablet workflow approved on 2026-09-13. Raise contradictions or material behavior decisions before affected work.
+`SPEC.md` guides product behavior; this plan records implementation order and progress. Prefer simpler approaches when they preserve important behavior, and update these documents when a better approach replaces an earlier design. The user's 2026-09-13 simplification request explicitly authorizes this judgment. Avoid speculative features, defensive layers, and tests that merely repeat implementation details.
 
-**Implement one milestone at a time; stop for explicit user approval before advancing.** Passing builds, silence, status questions, and feedback are not approval. Fix review findings within the current milestone and resubmit. Work autonomously within its authorized scope; resolve routine choices without asking. This plan does not authorize milestone 1.
+Milestones describe feature scope. The current simplification pass covers implemented milestones 1 and 2; it does not start the unfinished filter or capture features. Work autonomously within the user's authorized scope.
 
-Before each milestone:
-
-1. Inspect the working tree and applicable instructions; preserve user changes.
-2. Confirm preceding approval and read recorded findings.
-3. Identify requirements, dependencies, work, and acceptance checks. Include necessary prerequisites; exclude speculative future features.
+Before work, inspect the working tree and recorded findings, and identify the relevant behavior and checks. Committed code, uncommitted changes, tests, and these documents are all open to improvement under the user's simplification request; none is a design constraint merely because it already exists.
 
 Verify integration contracts against `../OpenTabletDriver-0.6.7` sources in spec section 7. Inspect `../Sample Plugins` for examples, packaging conventions, and implementation ideas, not as authoritative guidance or presumed best practice. Evaluate any borrowed approach against this spec, OTD 0.6.7 contracts, correctness, maintainability, and runtime cost; choose a better approach when warranted. Adjacent repositories are references only: do not modify them or fork OTD. Check dependency API compatibility, licenses, and deployment requirements; record choices. Use a robust deterministic geometry library.
 
@@ -18,19 +14,9 @@ Keep WPF/RPC outside the shared core; use one evaluator for the filter and autom
 
 ## Verification and review protocol
 
-Deliver each milestone buildable and reviewed: run relevant checks, fix failures, and inspect the diff. Test mathematical invariants, report handling, state transitions, and integration boundaries against independent expectations. Label synthetic reports/fixtures; they cannot establish hardware accuracy. Add no permanent diagnostic app or calibration-file workflow solely for tests.
+Run relevant checks, fix failures, and inspect the diff. Prefer existing tests and independent expectations for math, report handling, and integration boundaries. Synthetic fixtures cannot establish hardware accuracy; retain outstanding device checks without claiming they passed.
 
-At every stop, update the progress record below and provide:
-
-- Implemented behavior, covered spec sections, and files/artifacts.
-- Exact build/test/launch commands used and results.
-- Numbered user checks: prerequisites, expected outcomes, and temporary OTD setup cleanup.
-- Defects, deferred requirements, and pending tablet/display checks.
-- Explicit notice that implementation is paused for review.
-
-Distinguish **implemented**, **verified automatically**, **verified on device**, and **not yet verified**. Never mark unperformed checks passed. Record approval to advance with outstanding checks and carry them forward; approval is not verification. Final completion requires resolving required checks and known defects.
-
-Document working build/run commands in a concise README. Keep plan status/evidence sufficient to resume without conversation memory. Milestone completion alone does not authorize commits, publishing, or releases.
+Keep build/run instructions in README and record meaningful changes, verification results, and unresolved limitations here or in the milestone notes. Add manual checks when behavior needs them. Avoid repeating unchanged review checklists. Commits, publishing, and releases require user authorization.
 
 ## Milestone 1 — Build, acquisition, and target mapping
 
@@ -56,13 +42,13 @@ Implement:
 
 Implement:
 
-- Version 2 measured/identity models, schema/geometry validation, and diagnostics. Preserve version 1 until replacement/reset; never recover measurements from coefficients.
+- Measured/identity models, schema/geometry validation, and diagnostics. Support only the current unreleased data structure; no migration or backward-compatibility code.
 - Spec section 2 grid/pose generation and settings validation, including resolved coordinates and measured orientation semantics.
 - Deterministic node triangulation, capture separation, hull checks, barycentric interpolation, and nearest-boundary clamping. Distinguish captured-upright checks from origin coverage required for every loaded mesh.
 - Lookup using original raw position, four independent node evaluations, bilinear error blending, and correction; support nonuniform grids and differing sample counts.
 - Immutable prepared snapshots and compact serialization. Exclude guidance metadata from interpolation/runtime behavior.
 
-**Automated checks:** schema/version failures, geometry tolerance, grid/default pose counts, node vertex reproduction, triangle/grid continuity, hull projection, sample-order determinism, usable collinear/cocircular cases, invalid meshes, identity, and large-offset/gradient spatial residuals. Use small independently calculated fixtures. Confirm lookup-only clamping and no movement of measurements to requested poses.
+**Automated checks:** schema failures, geometry tolerance, grid/default pose counts, node vertex reproduction, triangle/grid continuity, hull projection, sample-order determinism, usable collinear/cocircular cases, invalid meshes, identity, and large-offset/gradient spatial residuals. Use small independently calculated fixtures. Confirm lookup-only clamping and no movement of measurements to requested poses.
 
 **User checks:** review example measurements, expected/actual correction, and rejection diagnostics. No physical calibration required; device accuracy remains unverified.
 
@@ -94,7 +80,7 @@ Implement:
 Retain the full tilt interpolation approach following the 2026-09-13 discussion. The upright-only core extension is complete; carry the remaining UI and capture items forward as marked below:
 
 - **Requested capture order:** upright, then all altitude levels for azimuth 1, all levels for azimuth 2, and so on, before the next crosshair. Update the spec traversal sentence, CreatePoses, and order tests together when implementing capture. This changes guidance order only, not mesh construction.
-- **Upright-only core implemented in milestone 2:** zero non-upright altitude levels or zero azimuths generate only upright. A single measured sample supplies a constant node error through the existing spatial blend and version 2 schema; multi-sample nodes keep their mesh checks. Tests cover loading, evaluation, invalid counts/data, and mixed nodes. Expose the controls and enforce upright pose capture in milestone 4.
+- **Upright-only core implemented in milestone 2:** zero non-upright altitude levels or zero azimuths generate only upright. A single measured sample supplies a constant node error through the existing spatial blend and current schema; multi-sample nodes keep their mesh checks. Tests cover loading, evaluation, invalid counts/data, and mixed nodes. Expose the controls and enforce upright pose capture in milestone 4.
 - **Confirmed burst acceptance:** retain the current spec: every eligible report must satisfy pose tolerance, followed by burst medians and position/tilt stability checks. Keep gap/duration/sample limits. The proposed median-only pose gate was declined.
 - **Presentation idea for later evaluation:** an arrow continuing from the pen tip toward a target point/sphere. Work out depth readability and explicitly reconcile its eraser-to-tip direction with the spec's tip-to-eraser azimuth convention. No 3D UI or rendering dependency is committed by this note.
 
@@ -150,9 +136,19 @@ States: Not started → In progress → Awaiting user review → Approved. Revie
 | Milestone | State | Evidence / findings | User approval |
 | --- | --- | --- | --- |
 | 1: Build, acquisition, mapping | Approved | Simplified workflow implemented; 25 synthetic tests and read-only device detection passed at that milestone. Physical/UI checks in docs/MILESTONE1.md remain pending and are carried forward. | User explicitly requested "Implement milestone 2" on 2026-09-13. Approval to advance is not device verification. |
-| 2: Data and correction core | Awaiting user review | Version 2 data, layout, immutable measured meshes, and correction evaluator implemented. Locked restore, Release build, and 98 synthetic tests passed. See docs/MILESTONE2.md. | Implementation explicitly requested on 2026-09-13; milestone 3 not approved. |
+| 2: Data and correction core | Awaiting user review | Calibration data, layout, immutable measured meshes, and correction evaluator implemented. Locked restore, Release build, and 93 synthetic tests passed. See docs/MILESTONE2.md. | Implementation explicitly requested on 2026-09-13; milestone 3 not approved. |
 | 3: Filter and package | Not started | — | — |
 | 4: Capture and review | Not started | — | — |
 | 5: Audit and delivery | Not started | — | — |
 
 Current stop: milestone 2 review. No approval to advance to milestone 3. See docs/MILESTONE2.md for core verification and carried-forward physical-device checks.
+
+2026-09-13 simplification review:
+
+- Removed the second Delaunay in-circle audit and format/version machinery. Retained sample/triangle/hull validation and invalid-data identity fallback.
+- Replaced acquisition polling with direct channel reads and a processing-only stall timer. Parser timeout no longer depends on RPC timeout. Ordered debug cleanup remains independent of the worker; one `RestartRequired` flag describes whether retry is allowed.
+- One async click handler owns preview startup through cleanup, with a single running flag instead of a separately stored acquisition task and window-level preview field. Closing during startup now also waits for that operation. Display cancellation closes the preview after bounded cleanup.
+- Prepared nodes use one rectangular array. Removed unused readiness state, exception wrapping, and small redundant allocations; target totals come from the layout.
+- Updated existing tests for restart behavior and buffered-parser cleanup, and removed compatibility-specific test cases and the constant-string assertion. Release solution build passed with zero warnings/errors; all 93 synthetic cases passed using the README commands. No dependencies or features added. Physical/UI checks remain pending.
+
+- Review fixes: RunAsync dispatches the session to the thread pool so daemon-disconnect cleanup does not await the calling UI context. Cleanup-failure instructions explicitly require restarting OTD and Calibrator. A paused-context regression test and recovery-message assertion failed before these fixes and passed afterward.

@@ -1,7 +1,6 @@
 using NetTopologySuite.Algorithm;
 using NetTopologySuite.Geometries;
 using NetTopologySuite.Triangulate;
-using NetTopologySuite.Triangulate.QuadEdge;
 
 namespace CalibrationSuite.Core;
 
@@ -21,16 +20,17 @@ public sealed class NodeMesh
         if (!target.IsFinite || samples == null || (samples.Length != 1 && samples.Length < 4)
             || samples.Any(s => s == null || !s.Tilt.IsFinite || !s.Position.IsFinite))
             throw new CalibrationException("Require one upright sample or at least four tilt samples, with finite positions, tilts, and target.");
-        var sorted = samples.OrderBy(s => s.Tilt.X).ThenBy(s => s.Tilt.Y).ToArray();
-        var tilts = sorted.Select(s => s.Tilt).ToArray();
-        if (tilts.Distinct().Count() != tilts.Length)
-            throw new CalibrationException("Duplicate measured tilts cannot define distinct errors; recapture those poses.");
+        var sorted = samples.Length == 1 ? samples : samples.OrderBy(s => s.Tilt.X).ThenBy(s => s.Tilt.Y).ToArray();
         var errors = sorted.Select(s => s.Position - target).ToArray();
         if (errors.Any(e => !e.IsFinite)) throw new CalibrationException("Measured position errors overflow.");
         // A single measured error is constant in tilt; the spatial blend needs no special case.
-        if (samples.Length == 1) return new(tilts, errors, [], []);
+        if (samples.Length == 1) return new([], errors, [], []);
 
-        var indices = tilts.Select((p, i) => (p, i)).ToDictionary(v => v.p, v => v.i);
+        var tilts = sorted.Select(s => s.Tilt).ToArray();
+        var indices = new Dictionary<Point2, int>();
+        for (int i = 0; i < tilts.Length; i++)
+            if (!indices.TryAdd(tilts[i], i))
+                throw new CalibrationException("Duplicate measured tilts cannot define distinct errors; recapture those poses.");
         var builder = new DelaunayTriangulationBuilder { Tolerance = 0 };
         var coordinates = tilts.Select(p => new Coordinate(p.X, p.Y)).ToArray();
         builder.SetSites(coordinates);
@@ -46,12 +46,6 @@ public sealed class NodeMesh
             double area = Point2.Cross(tilts[b] - tilts[a], tilts[c] - tilts[a]);
             if (!double.IsFinite(area) || area <= 0 || !double.IsFinite(1 / area))
                 throw new CalibrationException("Tilt triangle is numerically unusable; recapture its poses.");
-            // NTS constructs with normalized double in-circle tests. Check the result using its
-            // extended-precision predicate before accepting it, without jittering or repairing samples.
-            for (int j = 0; j < coordinates.Length; j++)
-                if (j != a && j != b && j != c && TrianglePredicate.IsInCircleDDNormalized(
-                    coordinates[a], coordinates[b], coordinates[c], coordinates[j]))
-                    throw new CalibrationException("Tilt triangulation failed its robust Delaunay check; recapture the affected node.");
             triangles.Add((a, b, c));
         }
         triangles.Sort();
@@ -72,7 +66,7 @@ public sealed class NodeMesh
         var mesh = Prepare(samples, target);
         for (int i = 0; i < samples.Length; i++)
             for (int j = 0; j < i; j++)
-                if (!CanAddCapture([samples[j]], samples[i].Tilt))
+                if (!Separated(samples[j].Tilt, samples[i].Tilt))
                     throw new CalibrationException($"Poses {j} and {i} are within 0.1 degree; recapture them.");
         if (uprightIndex < 0 || uprightIndex >= samples.Length)
             throw new CalibrationException("Captured upright pose index is invalid.");
@@ -82,8 +76,9 @@ public sealed class NodeMesh
     }
 
     public static bool CanAddCapture(IEnumerable<CalibrationSample> samples, Point2 measuredTilt) =>
-        measuredTilt.IsFinite && samples.All(s => DistanceSquared(s.Tilt, measuredTilt) > 0.1 * 0.1);
+        measuredTilt.IsFinite && samples.All(s => Separated(s.Tilt, measuredTilt));
 
+    private static bool Separated(Point2 a, Point2 b) => DistanceSquared(a, b) > 0.1 * 0.1;
     private static double DistanceSquared(Point2 a, Point2 b) => Point2.Dot(a - b, a - b);
     private static int Side(Point2 a, Point2 b, Point2 p) =>
         CGAlgorithmsDD.OrientationIndex(a.X, a.Y, b.X, b.Y, p.X, p.Y);

@@ -3,11 +3,11 @@ namespace CalibrationSuite.Core;
 public sealed class PreparedCalibration
 {
     private readonly double[] rows, columns;
-    private readonly NodeMesh[][] nodes;
+    private readonly NodeMesh[,] nodes;
     public bool IsIdentity => nodes.Length == 0;
-    public static PreparedCalibration Identity { get; } = new([], [], []);
+    public static PreparedCalibration Identity { get; } = new([], [], new NodeMesh[0, 0]);
 
-    private PreparedCalibration(double[] rows, double[] columns, NodeMesh[][] nodes)
+    private PreparedCalibration(double[] rows, double[] columns, NodeMesh[,] nodes)
     {
         this.rows = rows; this.columns = columns; this.nodes = nodes;
     }
@@ -22,8 +22,6 @@ public sealed class PreparedCalibration
 
     public static PreparedCalibration Prepare(CalibrationData data, SourceGeometry geometry)
     {
-        if (data.Format != "CalibrationSuite" || data.Version != 2)
-            throw new CalibrationException("Unsupported calibration format/version; recalibration is required.");
         if (data.Mode == "identity") return Identity;
         if (data.Mode != "measured") throw new CalibrationException("Unsupported calibration mode.");
         if (data.SourceGeometry == null || data.Grid == null || data.Nodes == null)
@@ -35,20 +33,17 @@ public sealed class PreparedCalibration
         var columns = ValidateAxis(data.Grid.PreTransformColumnCoordinates, data.SourceGeometry.MaxX, "column");
         if (data.Nodes.Length != rows.Length || data.Nodes.Any(row => row == null || row.Length != columns.Length))
             throw new CalibrationException("Node dimensions must match grid rows and columns.");
-        var nodes = new NodeMesh[rows.Length][];
+        var nodes = new NodeMesh[rows.Length, columns.Length];
         for (int r = 0; r < rows.Length; r++)
-        {
-            nodes[r] = new NodeMesh[columns.Length];
             for (int c = 0; c < columns.Length; c++)
             {
                 try
                 {
                     var node = data.Nodes[r][c] ?? throw new CalibrationException("Missing node.");
-                    nodes[r][c] = NodeMesh.Prepare(node.Samples, new(columns[c], rows[r]));
+                    nodes[r, c] = NodeMesh.Prepare(node.Samples, new(columns[c], rows[r]));
                 }
                 catch (CalibrationException ex) { throw new CalibrationException($"Node [{r}][{c}]: {ex.Message}"); }
             }
-        }
         return new(rows, columns, nodes);
     }
 
@@ -66,10 +61,10 @@ public sealed class PreparedCalibration
         if (IsIdentity || !position.IsFinite || !tilt.IsFinite) return position;
         var (r, v) = Locate(rows, position.Y);
         var (c, u) = Locate(columns, position.X);
-        var error = nodes[r][c].Evaluate(tilt) * ((1 - u) * (1 - v))
-            + nodes[r][c + 1].Evaluate(tilt) * (u * (1 - v))
-            + nodes[r + 1][c].Evaluate(tilt) * ((1 - u) * v)
-            + nodes[r + 1][c + 1].Evaluate(tilt) * (u * v);
+        var error = nodes[r, c].Evaluate(tilt) * ((1 - u) * (1 - v))
+            + nodes[r, c + 1].Evaluate(tilt) * (u * (1 - v))
+            + nodes[r + 1, c].Evaluate(tilt) * ((1 - u) * v)
+            + nodes[r + 1, c + 1].Evaluate(tilt) * (u * v);
         var corrected = position - error;
         return corrected.IsFinite ? corrected : position;
     }

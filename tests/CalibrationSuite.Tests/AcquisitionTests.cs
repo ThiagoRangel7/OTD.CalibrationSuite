@@ -2,6 +2,7 @@ using CalibrationSuite.Otd;
 using OpenTabletDriver.Desktop.RPC;
 using OpenTabletDriver.Plugin.Tablet;
 using Xunit;
+using System.Collections.Concurrent;
 
 namespace CalibrationSuite.Tests;
 
@@ -28,6 +29,37 @@ public sealed class FakeDaemon : IAcquisitionDaemon
 
 public class AcquisitionTests
 {
+    private sealed class PausedContext : SynchronizationContext
+    {
+        private readonly ConcurrentQueue<(SendOrPostCallback Callback, object? State)> pending = new();
+        public override void Post(SendOrPostCallback callback, object? state) => pending.Enqueue((callback, state));
+        public void Drain() { while (pending.TryDequeue(out var item)) item.Callback(item.State); }
+    }
+
+    [Fact]
+    public async Task DisconnectCleansUpWithoutPumpingTheCallingContext()
+    {
+        var daemon = new FakeDaemon(); var session = Session(daemon);
+        var context = new PausedContext();
+        var previous = SynchronizationContext.Current;
+        Task<string> run;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(context);
+            run = session.RunAsync();
+        }
+        finally { SynchronizationContext.SetSynchronizationContext(previous); }
+        try
+        {
+            await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            daemon.Invalidate();
+            Assert.Contains("disconnected", await run.WaitAsync(TimeSpan.FromSeconds(3)));
+            Assert.Equal(new[] { true, false }, daemon.DebugCalls);
+            Assert.False(daemon.HasSubscribers);
+        }
+        finally { session.Cancel(); context.Drain(); }
+    }
+
     private static AcquisitionSession Session(FakeDaemon daemon, AcquisitionOptions? options = null) =>
         new(daemon, daemon.Tablet, options ?? new(StallMilliseconds: 1000));
 
@@ -61,7 +93,7 @@ public class AcquisitionTests
     [Fact]
     public async Task PenAbsenceWaitsAndReportsResumeWithoutRestart()
     {
-        var daemon = new FakeDaemon(); var session = Session(daemon, new(StallMilliseconds: 80));
+        var daemon = new FakeDaemon(); var session = Session(daemon, new(StallMilliseconds: 80, RpcTimeoutMilliseconds: 80));
         var run = Task.Run(session.RunAsync);
         await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3));
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
@@ -131,8 +163,10 @@ public class AcquisitionTests
         var run = Task.Run(session.RunAsync);
         await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3));
         session.Cancel();
-        Assert.Contains("cleanup could not be confirmed", await run);
-        Assert.False(session.CleanupConfirmed);
+        var message = await run;
+        Assert.Contains("cleanup could not be confirmed", message);
+        Assert.Contains("Restart OTD and Calibrator", message);
+        Assert.True(session.RestartRequired);
         Assert.False(daemon.HasSubscribers);
         Assert.Equal(new[] { true, false }, daemon.DebugCalls);
     }
@@ -154,7 +188,7 @@ public class AcquisitionTests
         await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3));
         session.Cancel();
         Assert.Contains("cleanup could not be confirmed", await run.WaitAsync(TimeSpan.FromSeconds(3)));
-        Assert.False(session.CleanupConfirmed);
+        Assert.True(session.RestartRequired);
         Assert.Equal(new[] { true }, daemon.DebugCalls);
         enable.SetResult();
         await disabled.Task.WaitAsync(TimeSpan.FromSeconds(3));
@@ -169,7 +203,7 @@ public class AcquisitionTests
         var session = Session(daemon);
         Assert.Contains("Enable reply failed", await session.RunAsync());
         Assert.Equal(new[] { true, false }, daemon.DebugCalls);
-        Assert.True(session.CleanupConfirmed);
+        Assert.False(session.RestartRequired);
     }
 
     [Fact]
@@ -189,6 +223,8 @@ public class AcquisitionTests
     public async Task BlockedParserCannotPreventDebugCleanup()
     {
         var daemon = new FakeDaemon();
+        // Buffer a report before the worker starts, so its first read need not yield.
+        daemon.DebugAction = on => { if (on) daemon.Send(); return Task.CompletedTask; };
         using var release = new ManualResetEventSlim();
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var session = new AcquisitionSession(daemon, daemon.Tablet,
@@ -197,11 +233,10 @@ public class AcquisitionTests
         var run = Task.Run(session.RunAsync);
         try
         {
-            await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3)); daemon.Send();
+            await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3));
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(3));
             Assert.Contains("consumer stalled", await run.WaitAsync(TimeSpan.FromSeconds(3)));
-            Assert.False(session.WorkerStopped);
-            Assert.True(session.CleanupConfirmed);
+            Assert.True(session.RestartRequired);
             Assert.False(daemon.HasSubscribers);
             Assert.Equal(new[] { true, false }, daemon.DebugCalls);
         }

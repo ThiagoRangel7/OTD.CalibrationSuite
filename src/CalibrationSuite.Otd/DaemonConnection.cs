@@ -18,7 +18,6 @@ public sealed class DaemonConnection : IAcquisitionDaemon
 {
     private readonly RpcClient<IDriverDaemon> client;
     private Task? connecting;
-    public bool Ready { get; private set; }
     public event EventHandler<DebugReportData>? DeviceReport;
     public event EventHandler? Invalidated;
 
@@ -27,7 +26,6 @@ public sealed class DaemonConnection : IAcquisitionDaemon
         client = new(pipeName);
         client.Disconnected += (_, _) =>
         {
-            Ready = false;
             connecting = null;
             Invalidated?.Invoke(this, EventArgs.Empty);
         };
@@ -47,7 +45,6 @@ public sealed class DaemonConnection : IAcquisitionDaemon
         AppInfo.PluginManager.Load();
         client.Instance.DeviceReport += (_, report) => DeviceReport?.Invoke(this, report);
         client.Instance.TabletsChanged += (_, _) => Invalidated?.Invoke(this, EventArgs.Empty);
-        Ready = true;
     }
 
     public Task SetDebug(bool enabled) => client.Instance.SetTabletDebug(enabled);

@@ -87,7 +87,7 @@ public sealed class PreviewWindow : Window
         var target = targets[targetIndex];
         var latest = session.Latest;
         static string Pair(Vector2? value) => value is { } v ? $"{v.X:F1}, {v.Y:F1}" : "unavailable";
-        readings.Text = $"{tabletName}\nTarget {targetIndex + 1}/9 · raw {Pair(target)}\n"
+        readings.Text = $"{tabletName}\nTarget {targetIndex + 1}/{targets.Length} · raw {Pair(target)}\n"
             + $"Position: {Pair(latest?.Position)}   Tilt: {Pair(latest?.Tilt)}\n"
             + $"Raw error: {Pair(latest?.Position - target)}   Pressure: {latest?.Pressure.ToString() ?? "unavailable"}\n"
             + $"{latest?.Status ?? "Waiting for pen — progress is preserved"}\n\n"

@@ -103,8 +103,8 @@ public class IntegrationTests
     [Fact]
     public void InvalidDigitizerGeometryCannotStartPreview()
     {
-        Assert.Throws<InvalidOperationException>(() => PreviewGeometry.Targets(30, 100, 1000, 1000));
-        Assert.Throws<InvalidOperationException>(() => PreviewGeometry.Targets(200, 100, 0, 1000));
-        Assert.Throws<InvalidOperationException>(() => PreviewGeometry.Targets(float.NaN, 100, 1000, 1000));
+        Assert.Throws<CalibrationException>(() => PreviewGeometry.Targets(30, 100, 1000, 1000));
+        Assert.Throws<CalibrationException>(() => PreviewGeometry.Targets(200, 100, 0, 1000));
+        Assert.Throws<CalibrationException>(() => PreviewGeometry.Targets(float.NaN, 100, 1000, 1000));
     }
 }

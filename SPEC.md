@@ -171,7 +171,7 @@ Use OTD for reset, enable/disable, backup/restore, and presets. Add no Calibrato
 
 Retain triangles over actual measured `(TiltX, TiltY)` for tilt correction, and bilinear blending across screen targets. Requested azimuth/altitude poses guide the user; they do not replace measured coordinates or determine mesh connectivity. Capture order does not affect the resulting correction.
 
-The requested rings suggest triangles around upright and quads between rings, but accepted measurements need not form regular rings. Measured-tilt triangulation handles these variations and upright with one evaluation rule. Retain the library and its existing preparation checks; switching to quads or restricting spatial grids is not justified merely to save a few lines.
+The requested rings suggest triangles around upright and quads between rings, but accepted measurements need not form regular rings. Measured-tilt triangulation handles these variations and upright with one evaluation rule. Use the library to choose the triangulation, then check that samples are retained, triangle arithmetic is usable, and the hull provides coverage. A second all-samples in-circle audit is unnecessary: interpolation requires usable triangles, not an independently certified Delaunay optimum.
 
 This is a practical design choice, not a claim that triangles are more accurate. Triangle interpolation reproduces vertex errors and is continuous, but its slope can change at edges and the chosen diagonal can affect intermediate estimates. Quads can produce different estimates and are not automatically more accurate. Reconsider interpolation only with a reasoned comparison using the same measured inputs and additional held-out measurements. Such a comparison does not add a guided accuracy-testing feature to the initial release.
 
@@ -216,11 +216,11 @@ Prepare immutable calibration snapshots outside the report path. No per-report f
 
 ## 5. Data and persistence
 
-Version 2 replaces version 1's position field/fitted coefficients with measured samples. Measured data requires every field below except `requestedPose`.
+Calibration Suite has not been released. All development revises the same initial release; earlier designs are not supported formats. There are no schema version fields, migrations, or backward-compatibility guarantees. Update the producer, consumer, examples, and tests together when the data structure changes. Measured data requires every field below except `requestedPose`.
 
 | Field                                | Meaning                                                                                 |
 | ------------------------------------ | --------------------------------------------------------------------------------------- |
-| `format`, `version`, `mode`          | `"CalibrationSuite"`, `2`, `"measured"`                                                 |
+| `mode`                            | `"measured"`                                                 |
 | `sourceGeometry.maxX/maxY`           | OTD raw digitizer maxima at capture                                                     |
 | `sourceGeometry.widthMm/heightMm`    | Active digitizer dimensions in millimeters at capture                                   |
 | `grid.preTransformRowCoordinates`    | Raw Y coordinates; array length is row count                                            |
@@ -230,8 +230,8 @@ Version 2 replaces version 1's position field/fitted coefficients with measured 
 | Sample `tilt.x/y`                    | Captured burst median OTD tilt axes, in degrees                                         |
 | Sample `requestedPose`               | Optional capture guidance in degrees; never interpolation coordinates                   |
 
-- Names/enum strings are case-sensitive; numbers finite; versions/counts integers. Ignore unknown optional properties only in supported versions; reject unknown versions/modes.
-- Grid lines strictly increase within raw digitizer bounds, with at least two rows/columns and exactly matching `nodes` dimensions. Require exactly one finite sample per constant-error node, or at least four distinct samples and usable geometry per tilt-dependent node (section 4). Keep version 2 measured mode and the existing sample schema: sample count determines evaluation, with no new flag. Allow nonuniform grids/differing sample counts, including constant and triangulated nodes in the same dataset; evaluate each independently before spatial blending.
+- Names/enum strings are case-sensitive; numbers finite; counts integers. Ignore unknown optional properties; reject unknown modes.
+- Grid lines strictly increase within raw digitizer bounds, with at least two rows/columns and exactly matching `nodes` dimensions. Require exactly one finite sample per constant-error node, or at least four distinct samples and usable geometry per tilt-dependent node (section 4). Use measured mode and the sample schema: sample count determines evaluation, with no new flag. Allow nonuniform grids/differing sample counts, including constant and triangulated nodes in the same dataset; evaluate each independently before spatial blending.
 - Derive targets from row/column coordinates and errors as `position - target`; never persist redundant authoritative errors.
 - Compare all four `sourceGeometry` fields to injected OTD geometry with relative tolerance `1e-6`. Mismatches require recalibration, never rescaling. This guards configuration changes/incompatible pastes; matching geometry neither proves tablet/pen equivalence nor replaces OTD profile selection.
 
@@ -241,8 +241,6 @@ Illustrative 2x2 document: fictional 100 x 100 mm, 1000 x 1000 raw digitizer, 15
 
 ```json
 {
-  "format": "CalibrationSuite",
-  "version": 2,
   "mode": "measured",
   "sourceGeometry": {
     "maxX": 1000,
@@ -302,10 +300,10 @@ Illustrative 2x2 document: fictional 100 x 100 mm, 1000 x 1000 raw digitizer, 15
 Identity requires no grid, geometry, or samples:
 
 ```json
-{ "format": "CalibrationSuite", "version": 2, "mode": "identity" }
+{ "mode": "identity" }
 ```
 
-In the runtime filter, before activation, validate schema, geometry compatibility, dimensions, and sample meshes. Invalid/unsupported data yields identity behavior with OTD-log diagnostics. Version 1 requires recalibration: preserve its JSON until replacement/reset; never fabricate captures from coefficients.
+In the runtime filter, before activation, validate schema, geometry compatibility, dimensions, and sample meshes. Invalid/unsupported data yields identity behavior with OTD-log diagnostics.
 
 ### Applying, saving, and status
 
@@ -329,7 +327,7 @@ A future guided accuracy-testing feature may reuse acquisition and the shared ev
 
 | Checks               | Coverage                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Math/data            | Exact node tilt-vertex reproduction within numeric tolerance; combined spatial residuals including large offsets/gradients; triangle/grid continuity; hull clamping; upright and circular azimuth/signs; identity, geometry mismatches, malformed data, version 1 rejection                                                                                                                                                                                                |
+| Math/data            | Exact node tilt-vertex reproduction within numeric tolerance; combined spatial residuals including large offsets/gradients; triangle/grid continuity; hull clamping; upright and circular azimuth/signs; identity, geometry mismatches, malformed data                                                                                                                                                                                                |
 | Workflow/integration | Candidate accept/discard and session-only pending data; OTD Plugin Manager, generated property paste/clear, enable checkbox, Save/Apply, settings/presets round-trip; filter PreTransform stage and documented ordering responsibilities; report reconstruction/interfaces/events; automatic connection, single-tablet detection, and pen absence/resumption; monitor DPI/offsets; sampling/rendering during pen contact |
 | Device               | Orientation semantics, capture defaults, held-out positional/tilt accuracy; mathematical tests alone do not establish hardware accuracy                                                                                                                                                                                                                                                                                                                                    |
 

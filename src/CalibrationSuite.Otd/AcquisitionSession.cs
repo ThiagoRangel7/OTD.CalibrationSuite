@@ -21,8 +21,7 @@ public sealed class AcquisitionSession
     private int started;
     public ReportReading? Latest => Volatile.Read(ref latest) is { } reading
         && Stopwatch.GetElapsedTime(reading.Timestamp).TotalMilliseconds < 500 ? reading : null;
-    public bool CleanupConfirmed { get; private set; } = true;
-    public bool WorkerStopped { get; private set; } = true;
+    public bool RestartRequired { get; private set; }
 
     public AcquisitionSession(IAcquisitionDaemon daemon, TabletReference tablet,
         AcquisitionOptions? options = null, Func<DebugReportData, long, ReportReading>? reconstruct = null)
@@ -54,7 +53,10 @@ public sealed class AcquisitionSession
             Cancel("Report queue overflow. Preview cancelled; retry after reducing system load.");
     }
 
-    public async Task<string> RunAsync()
+    // Session cleanup must not depend on the caller's UI synchronization context.
+    public Task<string> RunAsync() => Task.Run(RunCoreAsync);
+
+    private async Task<string> RunCoreAsync()
     {
         if (Interlocked.Exchange(ref started, 1) != 0) throw new InvalidOperationException("Session already started.");
         daemon.DeviceReport += OnReport;
@@ -69,9 +71,8 @@ public sealed class AcquisitionSession
             stop.Token.ThrowIfCancellationRequested();
             enable = daemon.SetDebug(true);
             await enable.WaitAsync(RpcTimeout, stop.Token);
-            // The cancellation timer runs independently of a blocked report deserializer.
-            stop.CancelAfter(ConsumerTimeout);
-            worker = ConsumeAsync();
+            // Buffered reports may deserialize synchronously; keep cleanup independent of the worker.
+            worker = Task.Run(ConsumeAsync);
             await worker.WaitAsync(stop.Token);
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested)
@@ -87,17 +88,16 @@ public sealed class AcquisitionSession
             queue.Writer.TryComplete();
             if (enable != null)
             {
-                CleanupConfirmed = false;
                 // One ordered cleanup task also handles an enable reply arriving after timeout.
                 var cleanup = DisableAfterEnableAsync(enable);
                 try
                 {
                     await cleanup.WaitAsync(RpcTimeout);
-                    CleanupConfirmed = true;
                 }
                 catch (Exception ex)
                 {
-                    reason = $"{reason} Debug cleanup could not be confirmed ({ex.Message}). Close OTD's debugger or restart the daemon before retrying.";
+                    RestartRequired = true;
+                    reason = $"{reason} Debug cleanup could not be confirmed ({ex.Message}). Restart OTD and Calibrator before retrying.";
                     _ = ObserveAsync(cleanup);
                 }
             }
@@ -106,7 +106,7 @@ public sealed class AcquisitionSession
                 try { await worker.WaitAsync(TimeSpan.FromMilliseconds(200)); }
                 catch (TimeoutException)
                 {
-                    WorkerStopped = false;
+                    RestartRequired = true;
                     reason += " Report parser has not stopped; restart Calibrator before retrying.";
                     _ = ObserveAsync(worker);
                 }
@@ -117,7 +117,7 @@ public sealed class AcquisitionSession
     }
 
     private TimeSpan RpcTimeout => TimeSpan.FromMilliseconds(options.RpcTimeoutMilliseconds);
-    private TimeSpan ConsumerTimeout => TimeSpan.FromMilliseconds(Math.Max(options.StallMilliseconds, options.RpcTimeoutMilliseconds));
+    private TimeSpan ConsumerTimeout => TimeSpan.FromMilliseconds(options.StallMilliseconds);
 
     private static async Task ObserveAsync(Task task)
     {
@@ -127,27 +127,26 @@ public sealed class AcquisitionSession
 
     private async Task DisableAfterEnableAsync(Task enable)
     {
-        try { await enable.ConfigureAwait(false); } catch { /* Disable even after a failed reply. */ }
+        await ObserveAsync(enable).ConfigureAwait(false); // Disable even after a failed reply.
         await daemon.SetDebug(false).ConfigureAwait(false);
     }
 
     private async Task ConsumeAsync()
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(20));
-        while (await timer.WaitForNextTickAsync(stop.Token))
+        await foreach (var item in queue.Reader.ReadAllAsync(stop.Token))
         {
-            int processed = 0;
-            while (processed++ < options.Capacity && queue.Reader.TryRead(out var item))
+            stop.Token.ThrowIfCancellationRequested();
+            stop.CancelAfter(ConsumerTimeout);
+            if (Stopwatch.GetElapsedTime(item.Timestamp).TotalMilliseconds > options.StallMilliseconds)
+                throw new InvalidOperationException("Report consumer stalled; stale queue discarded.");
+            if (TabletSelection.Same(tablet, item.Data.Tablet))
             {
-                stop.Token.ThrowIfCancellationRequested();
-                if (Stopwatch.GetElapsedTime(item.Timestamp).TotalMilliseconds > options.StallMilliseconds)
-                    throw new InvalidOperationException("Report consumer stalled; stale queue discarded.");
-                if (!TabletSelection.Same(tablet, item.Data.Tablet)) continue;
                 var reading = reconstruct(item.Data, item.Timestamp);
                 stop.Token.ThrowIfCancellationRequested();
                 Volatile.Write(ref latest, reading);
             }
-            stop.CancelAfter(ConsumerTimeout);
+            // Waiting for the next report is ordinary pen absence, not a stalled parser.
+            stop.CancelAfter(Timeout.InfiniteTimeSpan);
         }
     }
 }

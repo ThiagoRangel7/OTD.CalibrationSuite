@@ -23,7 +23,6 @@ public class LiveDaemonTests(ITestOutputHelper output)
         await daemon.Connect().WaitAsync(TimeSpan.FromSeconds(5));
         var tablet = TabletSelection.Single(await daemon.GetTablets().WaitAsync(TimeSpan.FromSeconds(3)));
         output.WriteLine($"Detected tablet: {tablet.Properties.Name}");
-        Assert.True(daemon.Ready);
         // No settings reads or debug enablement.
     }
 }

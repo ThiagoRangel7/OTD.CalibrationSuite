@@ -43,8 +43,6 @@ public sealed record CalibrationGrid(
 // These are editable serialization models. Preparation copies all evaluator inputs.
 public sealed record CalibrationData
 {
-    public required string Format { get; init; }
-    public required int Version { get; init; }
     public required string Mode { get; init; }
     public SourceGeometry? SourceGeometry { get; init; }
     public CalibrationGrid? Grid { get; init; }
@@ -56,19 +54,12 @@ public sealed record CalibrationData
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
-    public static CalibrationData Identity => new() { Format = "CalibrationSuite", Version = 2, Mode = "identity" };
+    public static CalibrationData Identity => new() { Mode = "identity" };
 
     public static CalibrationData Parse(string json)
     {
         try
         {
-            // Check the version before binding the measured schema so legacy payloads get a useful diagnostic.
-            using var document = JsonDocument.Parse(json);
-            if (document.RootElement.ValueKind == JsonValueKind.Object
-                && document.RootElement.TryGetProperty("version", out var version)
-                && version.ValueKind == JsonValueKind.Number && version.TryGetInt32(out int number)
-                && number == 1)
-                throw new CalibrationException("Version 1 requires recalibration. Keep the original data until replacement or reset.");
             return JsonSerializer.Deserialize<CalibrationData>(json, JsonOptions)
                 ?? throw new CalibrationException("Calibration data must be an object.");
         }
