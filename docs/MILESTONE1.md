@@ -1,6 +1,6 @@
 # Milestone 1 review — 2026-09-13
 
-**Approved to advance.** After reviewing the simplified workflow, the user explicitly requested "Implement milestone 2" on 2026-09-13. This records approval to advance, not completion of the physical checks below. The following implementation and validation evidence describes milestone 1; see [milestone 2](MILESTONE2.md) for subsequent core work.
+**Approved to advance.** After reviewing the simplified workflow, the user explicitly requested "Implement milestone 2" on 2026-09-13. The physical checklist was subsequently reported passing by the user on 2026-09-13; details and remaining limits are recorded below. The following implementation and validation evidence describes milestone 1; see [milestone 2](MILESTONE2.md) for subsequent core work.
 
 ## Implemented behavior
 
@@ -39,7 +39,7 @@ git diff --check
 
 Test results are in the ignored tests/CalibrationSuite.Tests/TestResults directory. Prior source preparation, locked restore, deterministic rebuild, and hidden startup checks passed for the earlier milestone 1 implementation. Those historical checks do not establish the new visible window placement or physical-device behavior.
 
-## User review checks — pending
+## User review checks
 
 Launch from the repository:
 
@@ -57,10 +57,26 @@ dotnet run --project src/CalibrationSuite.Calibrator -c Release --no-build --no-
 
 ## Outstanding
 
-**Verified on device:** only read-only detection of the actual tablet through its running daemon. No physical pen/contact/aiming/tilt-accuracy check has been performed.
+**User-verified on 2026-09-13:** the user reported completing the conversational physical checklist with everything working as intended on their Huion Kamvas 13 (Gen 3): automatic connection and full-screen placement, targets/live readings and contact responsiveness, pen absence/resumption, tilt directions, repeated exit/restart, and disconnect recovery. They reported all tests passing, including the suggested display-setting check; individual resolution/scaling configurations were not specified. This is user-reported verification, not an automated or assistant-observed device test.
 
-**Not yet verified:** new visible window/full-screen placement, monitor-overlap selection, real pen pause/resume/contact, geometry/DPI changes, actual debug cleanup during physical disconnect, and all orientation semantics. These remain user review checks, not passing automated checks.
+**Not established by that report:** exhaustive monitor-overlap/negative-origin/mixed-DPI configurations, zero/multiple-device setups, deliberate OTD mapping changes, the numeric angular scale at a known physical lean, diagonal angle conversion, or calibration accuracy. These broader cases are not implied by the basic checklist passing.
 
 Exact HidSharpCore package notice verification and final dependency distribution remain pending for delivery. SPEC.md retains mathematical validation/capture-quality requirements and excludes guided accuracy-testing UI.
 
-Milestone 1's physical/device checks remain pending and are carried into milestone 2's review record.
+The basic physical checklist is now user-verified. Carry only the additional configurations and accuracy/angle-scale checks above forward.
+
+## Recorded tilt directions and OTD source trace
+
+The user kept the tip on the display and reported these raw values:
+
+| Eraser direction | TiltX | TiltY | Spec azimuth |
+| --- | ---: | ---: | ---: |
+| Left | 50 | 0 | 0 degrees |
+| Right | -50 | 0 | 180 degrees |
+| Top | 0 | -50 | 270 degrees |
+| Bottom | 0 | 50 | 90 degrees |
+| Upright | 0 | 0 | unavailable |
+
+In the adjacent OTD 0.6.7 tree, `OpenTabletDriver.Configurations/Configurations/Huion/Kamvas 13 (Gen 3).json` selects `OpenTabletDriver.Configurations.Parsers.Huion.GianoReportParser`. Its pen-report branch constructs `GianoReport`, which reads signed bytes 10 and 11 and negates both for TiltX/TiltY. The configuration supplies parser selection, not physical direction or angle-scale metadata; `ITiltReport` exposes only a Vector2 with no documented physical axis convention.
+
+These observations establish horizontal sign reversal and matching vertical sign relative to our screen-aligned tip-to-eraser components. Assuming the reported axes are angular components in degrees, guidance should receive `sx = -tan(TiltX)` and `sy = tan(TiltY)` (convert degrees to radians for tan). The user did not measure a known 50-degree physical lean, so the readings establish directions, not angular-scale accuracy. Raw tilt used for stored samples and correction remains unchanged. No device-specific runtime adapter was added during this documentation update.

@@ -56,7 +56,7 @@ The upright-only core/data follow-up is implemented: either zero count generates
 
 Azimuth-first traversal and arrow/sphere guidance remain under [milestone 4 follow-ups](../PLAN.md#capture-follow-ups-from-milestone-2-review). Current CreatePoses still visits all azimuths at each altitude for full tilt capture. The median-only pose-gate proposal was declined; retain per-report pose tolerance followed by medians and stability checks. Burst capture is not implemented, and milestone 3 is not yet authorized.
 
-The physical monitor placement, real pen pause/contact/tilt directions, DPI changes, and disconnect cleanup checks in [milestone 1](MILESTONE1.md#user-review-checks--pending) remain unverified. The prior Huion detection check establishes only read-only connectivity. Mathematical tests do not validate aiming, device signs/ranges, capture defaults, or hardware accuracy.
+The user reported the basic physical checklist passing on 2026-09-13, including live readings, pen pause/contact, window placement, restart/disconnect behavior, and the suggested display-setting check. Cardinal tilt signs and upright were recorded for the Huion Kamvas 13 (Gen 3); see [milestone 1 evidence](MILESTONE1.md#recorded-tilt-directions-and-otd-source-trace). Specific display configurations, numeric angular scale, diagonal guidance, capture defaults, and correction accuracy are not established by those results.
 
 Numerically unusable geometry is rejected with a diagnostic. Library predicates and synthetic edge cases do not promise usable meshes for arbitrary extreme floating-point inputs. NTS's notice must accompany distribution; the earlier exact HidSharpCore notice check is also still pending for delivery.
 
