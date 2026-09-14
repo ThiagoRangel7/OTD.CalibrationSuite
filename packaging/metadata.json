@@ -1,0 +1,7 @@
+{
+  "Name": "Calibration Suite",
+  "Description": "Measured position and tilt correction for display tablets. Development package; capture UI is not yet available.",
+  "PluginVersion": "0.1.0",
+  "SupportedDriverVersion": "0.6.7.0",
+  "MaxSupportedDriverVersion": "0.6.7.0"
+}

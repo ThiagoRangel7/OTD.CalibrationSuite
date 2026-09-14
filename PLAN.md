@@ -4,7 +4,7 @@
 
 `SPEC.md` guides product behavior; this plan records implementation order and progress. Prefer simpler approaches when they preserve important behavior, and update these documents when a better approach replaces an earlier design. The user's 2026-09-13 simplification request explicitly authorizes this judgment. Avoid speculative features, defensive layers, and tests that merely repeat implementation details.
 
-Milestones describe feature scope. The current simplification pass covers implemented milestones 1 and 2; it does not start the unfinished filter or capture features. Work autonomously within the user's authorized scope.
+Milestones describe feature scope. The 2026-09-13 request to implement the next milestone authorizes milestone 3 following the milestone 2 review. Capture remains milestone 4. Work autonomously within the user's authorized scope.
 
 Before work, inspect the working tree and recorded findings, and identify the relevant behavior and checks. Committed code, uncommitted changes, tests, and these documents are all open to improvement under the user's simplification request; none is a design constraint merely because it already exists.
 
@@ -136,12 +136,12 @@ States: Not started → In progress → Awaiting user review → Approved. Revie
 | Milestone | State | Evidence / findings | User approval |
 | --- | --- | --- | --- |
 | 1: Build, acquisition, mapping | Approved | Simplified workflow implemented; 25 synthetic tests and read-only device detection passed at that milestone. Basic physical checklist reported passing by the user on 2026-09-13; cardinal tilt signs recorded. Additional configurations and angle-scale/accuracy checks remain in docs/MILESTONE1.md. | User explicitly requested "Implement milestone 2" on 2026-09-13. Approval to advance is not device verification. |
-| 2: Data and correction core | Awaiting user review | Calibration data, layout, immutable measured meshes, and correction evaluator implemented. Locked restore, Release build, and 93 synthetic tests passed. See docs/MILESTONE2.md. | Implementation explicitly requested on 2026-09-13; milestone 3 not approved. |
-| 3: Filter and package | Not started | — | — |
+| 2: Data and correction core | Approved | Calibration data, layout, immutable measured meshes, and correction evaluator implemented. Locked restore, Release build, and 93 synthetic tests passed. See docs/MILESTONE2.md. | User requested "Implement the next milestone" on 2026-09-13, authorizing milestone 3. This is not physical-device verification. |
+| 3: Filter and package | Awaiting user review | Positioned correction filter, injected snapshot activation, bounded diagnostics, and standard ZIP package implemented. See docs/MILESTONE3.md for verification and live review checks. | Implementation authorized on 2026-09-13; milestone 4 not started. |
 | 4: Capture and review | Not started | — | — |
 | 5: Audit and delivery | Not started | — | — |
 
-Current stop: milestone 2 review. No approval to advance to milestone 3. See docs/MILESTONE2.md for core verification and carried-forward physical-device checks.
+Current stop: milestone 3 review. See docs/MILESTONE3.md for package/runtime verification and pending live checks. Capture UI remains milestone 4.
 
 2026-09-13 simplification review:
 

@@ -1,0 +1,10 @@
+Calibration Suite development filter package
+
+Includes CalibrationSuite.Filter.dll and CalibrationSuite.Core.dll built from
+this repository, plus NetTopologySuite 2.6.0 (BSD-3-Clause).
+NetTopologySuite's complete upstream licensing notice is included alongside.
+Source: https://github.com/NetTopologySuite/NetTopologySuite/tree/v2.6.0
+
+Requires OpenTabletDriver 0.6.7 and its .NET 8 runtime. Host-owned OTD assemblies
+are not redistributed or replaced. No Calibrator/RPC dependencies are included.
+This is a local development artifact, not a published release.

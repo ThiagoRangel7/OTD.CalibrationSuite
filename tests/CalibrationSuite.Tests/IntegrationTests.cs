@@ -69,7 +69,7 @@ public class IntegrationTests
     }
 
     [Fact]
-    public void FilterShellEmitsOriginalBoxExactlyOnceInOrder()
+    public void UninitializedFilterEmitsOriginalBoxExactlyOnceInOrder()
     {
         var filter = new CalibrationFilter();
         IDeviceReport a = new TiltTabletReport { Raw = [], Position = new(1, 2) };

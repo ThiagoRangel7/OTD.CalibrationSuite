@@ -1,6 +1,6 @@
 # Calibration Suite
 
-A Windows calibrator for **display tablets**, using raw pen position and tilt from OTD 0.6.7. The app provides a full-screen target/readings preview, backed by a shared data and correction core. Applying correction in the OTD filter, capture, review, and copying arrive in later milestones.
+A Windows calibrator for **display tablets**, using raw pen position and tilt from OTD 0.6.7. The app provides a full-screen target/readings preview. The OTD filter applies the shared measured correction evaluator; capture, review, and copying arrive in milestone 4.
 
 This project has not been released. Earlier designs are iterations toward the first release, not supported data versions. Calibration data follows only the current structure, with no version tags, migrations, or backward-compatibility code. Development changes may require new calibration data.
 
@@ -28,12 +28,23 @@ Prerequisites: Windows, PowerShell 7, .NET SDK **10.0.401** (pinned), .NET 8 Win
 ./scripts/Prepare-Otd.ps1
 dotnet restore CalibrationSuite.sln --locked-mode -p:RestorePackagesWithLockFile=true
 dotnet build CalibrationSuite.sln -c Release --no-restore -p:BuildDate=2026-09-12
+./scripts/Package-Filter.ps1
 dotnet test tests/CalibrationSuite.Tests/CalibrationSuite.Tests.csproj -c Release --no-build --no-restore --filter 'Category!=LiveDaemon'
 ~~~
 
 Preparation verifies source hashes and copies unmodified OTD sources to ignored artifacts/otd-source; it does not build/edit the adjacent repository. NuGet packages stay under artifacts/packages; lock files and fixed OTD BuildDate make inputs repeatable.
 
-The runnable executable is src/CalibrationSuite.Calibrator/bin/Release/net8.0-windows/CalibrationSuite.Calibrator.exe. Keep the complete output directory together. The filter remains a pass-through shell, not a finished distributable package.
+The runnable executable is src/CalibrationSuite.Calibrator/bin/Release/net8.0-windows/CalibrationSuite.Calibrator.exe. Keep the complete output directory together. The filter ZIP is `artifacts/filter-package/CalibrationSuite.zip`. Rebuild and repackage before tests: the package test installs this ZIP into an isolated temporary OTD data directory, without touching your installed daemon or settings.
+
+## Install and review the filter
+
+In OTD 0.6.7, open **Plugins → Plugin Manager**, choose **Install plugin...** (or drag the ZIP into that window), and select `artifacts/filter-package/CalibrationSuite.zip`. Keep the stable ZIP filename when updating. The package includes the filter, shared core, NetTopologySuite, metadata, and notices; it does not replace OTD assemblies. Update/removal use the same Plugin Manager.
+
+In the intended tablet profile's **Filters** tab, add **Calibration Suite** and keep exactly one enabled entry. It runs at **PreTransform** and must receive unchanged parsed position and tilt: position/tilt-changing filters must not precede it. Configure ordering in OTD; the Calibrator does not inspect it. Same-name tablets share an OTD profile, so confirm the destination tablet and pen yourself.
+
+For this milestone, review live behavior with **Calibration data** empty (identity). Verify its paste/Save/clear tooltip, enable/bypass, **Apply**, and **Save**. Save persists and applies; Apply alone does not prove a disk save. Clear the property and Save to reset; disable the checkbox to bypass while retaining data. Do not paste fictional measurements from the specification or tests onto real hardware. Actual measured correction can be checked after capture becomes available.
+
+After milestone 4, paste accepted Calibrator data into **Calibration data** and Save. OTD settings and presets retain this string; no separate calibration file is needed. Invalid data or geometry mismatch uses identity and reports the reason in OTD logs. Repeated unsupported pen input produces one warning per activation; missing tilt is never treated as upright, and eraser/out-of-proximity reports pass unchanged. See [milestone 3 review checks](docs/MILESTONE3.md).
 
 An optional read-only installed-daemon check (no settings reads or debug enablement):
 
@@ -51,7 +62,7 @@ Start with [milestone 2 examples and checks](docs/MILESTONE2.md). The core has n
 
 The core also supports upright-only calibration: zero azimuths or zero non-upright levels produces one pose per target. A single sample supplies a constant error at that target, blended across the screen using the same formula. Its UI controls arrive with capture in milestone 4.
 
-The automated suite covers these mathematical and data rules using fictional measurements. It does not establish physical accuracy. The visible app remains a preview and the filter remains pass-through.
+The automated suite covers these mathematical and data rules using fictional measurements. It does not establish physical accuracy. The visible app remains a preview.
 
 ## Intended completed workflow
 
