@@ -7,5 +7,9 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../CalibrationSuite.Otd/CalibrationSuite.Otd.csproj" />
+    <None Include="../../dependencies/otd/LICENSE" Link="notices/OpenTabletDriver.LICENSE" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../packaging/NetTopologySuite.LICENSE.md" Link="notices/NetTopologySuite.LICENSE.md" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../packaging/CALIBRATOR-NOTICE.txt" Link="notices/NOTICE.txt" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="../../docs/DEPENDENCIES.md" Link="notices/DEPENDENCIES.md" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

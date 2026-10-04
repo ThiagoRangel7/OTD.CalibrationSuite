@@ -1,0 +1,12 @@
+<Project>
+  <Import Project="Upstream.props" />
+  <PropertyGroup>
+    <OtdRoot>$(MSBuildThisFileDirectory)</OtdRoot>
+    <RepositoryRoot>$([System.IO.Path]::GetFullPath('$(OtdRoot)../..'))/</RepositoryRoot>
+    <OtdSource>$(RepositoryRoot)artifacts/otd-source/</OtdSource>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode>true</RestoreLockedMode>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+</Project>

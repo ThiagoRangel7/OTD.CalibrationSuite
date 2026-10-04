@@ -1,0 +1,11 @@
+# Dependency notices for the Calibrator development output
+
+Calibration Suite uses OpenTabletDriver 0.6.7 (LGPL-3.0-or-later).
+The accompanying OpenTabletDriver.LICENSE contains the upstream license.
+Corresponding source: https://github.com/OpenTabletDriver/OpenTabletDriver/tree/736003ed72c8bbb28033b039d5a0bb76c344145c
+Our build definitions and source pin are in dependencies/otd in this repository.
+NetTopologySuite 2.6.0 licensing is in NetTopologySuite.LICENSE.md.
+
+The accompanying DEPENDENCIES.md records runtime package versions, licenses,
+and outstanding redistribution review. This folder is a development build;
+complete third-party notice verification before publishing a release.

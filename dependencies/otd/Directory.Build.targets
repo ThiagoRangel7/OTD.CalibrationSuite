@@ -1,0 +1,30 @@
+<Project>
+  <!-- Upstream definitions stay unchanged; downloaded source is attached here. -->
+  <PropertyGroup>
+    <BuildDate>2026-04-25</BuildDate>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <AssemblyAttribute Update="OpenTabletDriver.Plugin.Attributes.BuildDateAttribute">
+      <_Parameter1>$(BuildDate)</_Parameter1>
+    </AssemblyAttribute>
+    <None Remove="../README.md" />
+  </ItemGroup>
+  <Target Name="PrepareOtdSource" BeforeTargets="PrepareForBuild" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(RepositoryRoot)scripts/Prepare-Otd.ps1&quot;" />
+  </Target>
+  <Target Name="IncludeOtdSource" BeforeTargets="AssignTargetPaths" DependsOnTargets="PrepareOtdSource">
+    <ItemGroup>
+      <Compile Include="$(OtdSource)$(MSBuildProjectName)/**/*.cs" Exclude="$(OtdSource)$(MSBuildProjectName)/**/obj/**;$(OtdSource)$(MSBuildProjectName)/**/bin/**" />
+      <EmbeddedResource Include="$(OtdSource)$(MSBuildProjectName)/Configurations/*/*.json" />
+    </ItemGroup>
+    <ItemGroup>
+      <Compile Update="@(Compile)">
+        <Link>%(RecursiveDir)%(Filename)%(Extension)</Link>
+      </Compile>
+      <EmbeddedResource Update="@(EmbeddedResource)">
+        <LogicalName>$(MSBuildProjectName).Configurations.$([System.IO.Path]::GetFileName($([System.IO.Path]::GetDirectoryName('%(FullPath)')))).%(Filename)%(Extension)</LogicalName>
+      </EmbeddedResource>
+    </ItemGroup>
+  </Target>
+</Project>

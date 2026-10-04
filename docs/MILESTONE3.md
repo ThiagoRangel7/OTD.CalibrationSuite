@@ -1,6 +1,6 @@
 # Milestone 3 — filter and package review
 
-Implemented on 2026-09-13 following the user's request to implement the next milestone. Awaiting user review; milestone 4 has not started.
+Implemented on 2026-09-13 following the user's request to implement the next milestone. The user reported the build and live identity-data review checks passing on 2026-10-03. Milestone 4 has not started.
 
 ## Implementation
 
@@ -10,7 +10,7 @@ Eligible reports carry position and tilt together. Only Position is changed thro
 
 The report path performs interface checks, finite checks, and the shared evaluator call. No parsing, triangulation, I/O, locks, or routine logging occurs there. The first 100 unusable pen reports across an activation trigger one warning; the counter then saturates. Ordinary auxiliary/eraser/absence reports do not count. Unsupported reports retain identity behavior independently of subsequent eligible reports.
 
-`scripts/Package-Filter.ps1` writes `artifacts/filter-package/CalibrationSuite.zip` with DLLs at the ZIP root, matching OTD's installer. It includes the two Calibration Suite assemblies, NetTopologySuite 2.6.0, metadata, and notices. It excludes host-owned assemblies. This is a development artifact with local version 0.1.0, no download URL or publication. NetTopologySuite's complete license was obtained from the pinned v2.6.0 source; the file is retained in `packaging` for offline packaging.
+`scripts/Package-Filter.ps1` writes `artifacts/filter-package/Release/CalibrationSuite.zip` with DLLs at the ZIP root, matching OTD's installer. It includes the two Calibration Suite assemblies, NetTopologySuite 2.6.0, metadata, and notices. It excludes host-owned assemblies. This is a development artifact with local version 0.1.0, no download URL or publication. NetTopologySuite's complete license was obtained from the pinned v2.6.0 source; the file is retained in `packaging` for offline packaging.
 
 ## Source contract review
 
@@ -24,11 +24,27 @@ Run the README build/package/test commands. The suite includes real OTD package 
 
 Tests cover original boxed/class reports and fields, synchronous event order, pass-through cases, initialization failures, bounded unsupported diagnostics, the actual OTD PreTransform-to-transform chain, float overflow fallback, and zero allocated bytes across 1,000 warmed eligible correction calls. Existing core tests retain independent interpolation expectations. All measurements used are fictional.
 
-## Pending live review
+## Live review checklist
 
 1. Install the ZIP via OTD Plugin Manager and verify the filter name, property label, and tooltip. Use empty identity data initially.
 2. Keep exactly one enabled entry in the intended profile; ensure no position/tilt-changing filter precedes it. Verify enable/bypass, clear, Apply, and Save using OTD's controls.
 3. Check normal pen/eraser/proximity behavior and OTD logs. Confirm saved identity behavior after restarting OTD; review update/removal and settings/preset round-trips during delivery checks.
 4. After milestone 4 capture is available, verify measured correction on hardware. Do not install fictional test measurements. Prior angle-scale, diagonal, monitor, and physical-accuracy limits remain open.
 
-The live UI/device checklist has not been performed by this implementation turn. Automated package activation does not establish device accuracy or live UI behavior.
+The original implementation turn performed automated checks only. The subsequent user verification below records the live checks actually reported.
+
+## User verification — 2026-10-03
+
+The user reported "all these tests passed" after following the conversational build and plugin review instructions:
+
+- Open/build the solution and launch the Calibrator preview; run the non-live automated tests.
+- Build Release and install artifacts/filter-package/Release/CalibrationSuite.zip through OTD Plugin Manager, then restart OTD.
+- Verify the Calibration Suite filter, Calibration data field, and tooltip.
+- Leave calibration data empty, enable the filter, and Save; normal pen behavior remains unchanged.
+- Toggle enable/bypass and exercise Apply/Save without unexpected pointer changes.
+- Restart OTD and confirm settings persistence and normal pen behavior.
+- Inspect OTD's Console for plugin-loading warnings/errors; none were reported.
+
+This is user-reported verification on the user's setup, not a new assistant-run test result. The previously documented automated baseline is 104 non-live tests after the build-workflow update; no new test output or exact count was supplied with this report.
+
+Live identity-data integration checks are complete for that setup. Real measured correction and accuracy still require milestone 4 capture. Interactive filter breakpoints, update/removal, settings/preset backup round-trips, and broader device/configuration coverage were not part of the conversational checklist and remain for their planned checks. This record does not begin milestone 4.

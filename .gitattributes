@@ -1,0 +1,3 @@
+# Preserve exact upstream project definitions for verification against the source archive.
+dependencies/otd/*/*.csproj -text
+dependencies/otd/Upstream.props -text

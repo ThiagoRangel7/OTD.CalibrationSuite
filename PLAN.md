@@ -137,11 +137,11 @@ States: Not started → In progress → Awaiting user review → Approved. Revie
 | --- | --- | --- | --- |
 | 1: Build, acquisition, mapping | Approved | Simplified workflow implemented; 25 synthetic tests and read-only device detection passed at that milestone. Basic physical checklist reported passing by the user on 2026-09-13; cardinal tilt signs recorded. Additional configurations and angle-scale/accuracy checks remain in docs/MILESTONE1.md. | User explicitly requested "Implement milestone 2" on 2026-09-13. Approval to advance is not device verification. |
 | 2: Data and correction core | Approved | Calibration data, layout, immutable measured meshes, and correction evaluator implemented. Locked restore, Release build, and 93 synthetic tests passed. See docs/MILESTONE2.md. | User requested "Implement the next milestone" on 2026-09-13, authorizing milestone 3. This is not physical-device verification. |
-| 3: Filter and package | Awaiting user review | Positioned correction filter, injected snapshot activation, bounded diagnostics, and standard ZIP package implemented. See docs/MILESTONE3.md for verification and live review checks. | Implementation authorized on 2026-09-13; milestone 4 not started. |
+| 3: Filter and package | Awaiting user review | Positioned correction filter, injected snapshot activation, bounded diagnostics, and standard ZIP package implemented. User reported build and live identity-data review checks passing on 2026-10-03; see docs/MILESTONE3.md. Measured correction awaits capture. | Implementation authorized on 2026-09-13; milestone 4 not started. |
 | 4: Capture and review | Not started | — | — |
 | 5: Audit and delivery | Not started | — | — |
 
-Current stop: milestone 3 review. See docs/MILESTONE3.md for package/runtime verification and pending live checks. Capture UI remains milestone 4.
+Current stop: milestone 3 review checks passed per user report on 2026-10-03; ready for the next implementation instruction. See docs/MILESTONE3.md for evidence and remaining measured-correction/delivery checks. Capture UI remains milestone 4 and has not started.
 
 2026-09-13 simplification review:
 
@@ -154,3 +154,12 @@ Current stop: milestone 3 review. See docs/MILESTONE3.md for package/runtime ver
 - Review fixes: RunAsync dispatches the session to the thread pool so daemon-disconnect cleanup does not await the calling UI context. Cleanup-failure instructions explicitly require restarting OTD and Calibrator. A paused-context regression test and recovery-message assertion failed before these fixes and passed afterward.
 
 2026-09-13 device follow-up: user reports the physical checklist passing. For Huion Kamvas 13 (Gen 3), eraser left/right/top/bottom gives (50,0)/(-50,0)/(0,-50)/(0,50), upright (0,0). OTD configuration selects GianoReportParser, whose GianoReport negates signed bytes 10 and 11. Carry this source trace and observed sign convention into milestone 4 guidance; known-angle scale and diagonal conversion remain to verify. No milestone 3 implementation was started by this update.
+
+2026-09-14 build/editor workflow update (explicitly authorized before milestone 4):
+- Migrated the sole solution to CalibrationSuite.slnx, preserving all projects and configurations.
+- Replaced the adjacent-source prerequisite with verified, pinned source acquisition during builds; kept upstream project definitions for fresh-checkout editor loading.
+- Switched the filter to the official Plugin NuGet package, automated Debug/Release ZIP creation, and added editor launch/build/attach configuration.
+- Updated UI-first instructions and Calibrator output notices. Validation and remaining live-debug limitations are recorded in docs/BUILD-WORKFLOW.md.
+- Milestone 4 has not started. The user subsequently reported the milestone 3 live identity-data checks passing on 2026-10-03.
+
+2026-10-03 user review: build/editor checks, Release ZIP installation, filter/property presentation, empty-data enable/bypass, Apply/Save, persistence after OTD restart, and Console inspection all reported passing. Recorded as user-verified, without claiming measured correction accuracy or interactive breakpoint verification. Existing staged infrastructure changes are preserved; milestone 4 remains not started.

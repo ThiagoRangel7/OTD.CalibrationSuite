@@ -1,0 +1,27 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Calibrator",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "Build Debug",
+      "program": "${workspaceFolder}/src/CalibrationSuite.Calibrator/bin/Debug/net8.0-windows/CalibrationSuite.Calibrator.exe",
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false
+    },
+    {
+      "name": "Attach to OTD daemon",
+      "type": "coreclr",
+      "request": "attach",
+      "processId": "${command:pickProcess}",
+      "justMyCode": true,
+      "symbolOptions": {
+        "searchPaths": [
+          "${workspaceFolder}/src/CalibrationSuite.Filter/bin/Debug/net8.0",
+          "${workspaceFolder}/src/CalibrationSuite.Core/bin/Debug/net8.0"
+        ]
+      }
+    }
+  ]
+}

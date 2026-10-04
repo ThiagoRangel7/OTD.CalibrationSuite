@@ -1,0 +1,30 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build Debug",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["build", "${workspaceFolder}/CalibrationSuite.slnx", "-c", "Debug"],
+      "problemMatcher": "$msCompile",
+      "group": {"kind": "build", "isDefault": true}
+    },
+    {
+      "label": "Build Release",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["build", "${workspaceFolder}/CalibrationSuite.slnx", "-c", "Release"],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "Test",
+      "type": "process",
+      "command": "dotnet",
+      "args": ["test", "${workspaceFolder}/tests/CalibrationSuite.Tests/CalibrationSuite.Tests.csproj", "-c", "Debug", "--no-build", "--filter", "Category!=LiveDaemon"],
+      "dependsOn": "Build Debug",
+      "problemMatcher": "$msCompile",
+      "group": "test"
+    }
+  ]
+}

@@ -1,6 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../CalibrationSuite.Core/CalibrationSuite.Core.csproj" />
-    <ProjectReference Include="$(OtdSource)/OpenTabletDriver.Plugin/OpenTabletDriver.Plugin.csproj" Private="false" />
+    <PackageReference Include="OpenTabletDriver.Plugin" Version="0.6.7" ExcludeAssets="runtime" />
   </ItemGroup>
+  <Target Name="PackageFilter" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)/../../scripts/Package-Filter.ps1&quot; -Configuration $(Configuration)" />
+  </Target>
 </Project>

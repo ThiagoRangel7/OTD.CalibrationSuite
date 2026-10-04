@@ -16,6 +16,18 @@ namespace CalibrationSuite.Tests;
 // All tablets and reports in this project are synthetic; none establishes device accuracy.
 public class IntegrationTests
 {
+    [Fact]
+    public void SourceBuiltOtdRetainsEmbeddedTabletConfigurations()
+    {
+        var assembly = typeof(OpenTabletDriver.Configurations.Parsers.Huion.GianoReport).Assembly;
+        const string resource = "OpenTabletDriver.Configurations.Configurations.Huion.Kamvas 13 (Gen 3).json";
+        using var stream = assembly.GetManifestResourceStream(resource);
+        Assert.NotNull(stream);
+        using var reader = new StreamReader(stream);
+        var configuration = JsonConvert.DeserializeObject<TabletConfiguration>(reader.ReadToEnd());
+        Assert.Equal("Huion Kamvas 13 (Gen 3)", configuration!.Name);
+    }
+
     public static TabletReference Tablet() => new(new TabletConfiguration
     {
         Name = "Synthetic tablet",

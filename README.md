@@ -20,25 +20,58 @@ Supported setup: the full active digitizer covers the full screen, with X pointi
 
 Close OTD's tablet debugger before starting. Debug acquisition is daemon-global; concurrent debugger use is unsupported. Cleanup runs on exit/cancellation. If cleanup is unconfirmed, restart OTD and Calibrator before retrying. No OTD profile/settings are read or changed. Tilt is shown as parsed, without angle guidance until actual device semantics are verified.
 
-## Build and test
+## Build and debug through the editor
 
-Prerequisites: Windows, PowerShell 7, .NET SDK **10.0.401** (pinned), .NET 8 Windows Desktop runtime, and the reviewed adjacent source tree at ../OpenTabletDriver-0.6.7.
+Use **Visual Studio 2026** with the **.NET desktop development** workload and the pinned **.NET SDK 10.0.401**. Windows PowerShell 5.1 (included with Windows) runs the build helpers. The Calibrator needs the .NET 8 Windows Desktop runtime. Internet is needed for the first dependency restore/source download.
+
+1. In Visual Studio choose **Open a project or solution**, then select **CalibrationSuite.slnx**.
+2. Choose **Build → Build Solution**. The first build downloads and verifies the pinned OTD source automatically; later builds reuse it. No neighboring OTD checkout or preparation command is needed.
+3. In **View → Solution Explorer**, right-click **CalibrationSuite.Calibrator → Set as Startup Project**.
+4. Select **Debug** in the toolbar. Start OTD normally, then click the green **Start** button to build and debug the Calibrator.
+5. Open **Test → Test Explorer** and choose **Run All Tests**. The live-daemon test is opt-in; other tests use synthetic data.
+
+A breakpoint is a red dot added by clicking beside a line number. The debugger pauses there so you can inspect variables. Pausing acquisition can activate its intentional stall/time limits.
+
+**VS Code:** open this repository folder and install the recommended **C# Dev Kit** extension. The workspace selects CalibrationSuite.slnx. Choose **Terminal → Run Build Task → Build Debug**, or **Run and Debug → Calibrator → Start Debugging**. **Terminal → Run Task** also offers **Build Release** and **Test**. The configured tasks perform the same builds as Visual Studio.
+
+### Build and debug the filter
+
+Building **CalibrationSuite.Filter**, or the whole solution, automatically creates a ZIP:
+
+- Debug: **artifacts/filter-package/Debug/CalibrationSuite.zip**, including matching PDB debugging symbols.
+- Release: **artifacts/filter-package/Release/CalibrationSuite.zip**, for normal installation.
+
+To debug the filter, install the Debug ZIP through OTD's Plugin Manager, then restart OTD so the new assembly is loaded. This is an explicit installation step; building never overwrites your installed plugin or settings.
+
+In Visual Studio choose **Debug → Attach to Process**, select **OpenTabletDriver.Daemon**, and attach using managed .NET debugging. In VS Code select **Attach to OTD daemon** in **Run and Debug** and choose that same process. Set a breakpoint in CalibrationFilter.Consume and move the pen. To catch Initialize, attach first, then choose **Apply** in OTD. If a breakpoint is hollow/unbound, confirm that the installed DLL and local PDB are from the same build; reinstall the Debug ZIP and restart OTD after changes. VS Code includes local symbol search paths; in Visual Studio use **Debug → Windows → Modules → Load Symbols** if needed.
+
+Keep a mouse available: pausing the daemon pauses tablet processing. Do not install fictional measured data; use identity for initial live checks. Calibrator launch and filter attachment are separate debug sessions.
+
+### Command-line equivalent and outputs
+
+These commands are optional; editor builds do the same work:
 
 ~~~powershell
-./scripts/Prepare-Otd.ps1
-dotnet restore CalibrationSuite.sln --locked-mode -p:RestorePackagesWithLockFile=true
-dotnet build CalibrationSuite.sln -c Release --no-restore -p:BuildDate=2026-09-12
-./scripts/Package-Filter.ps1
-dotnet test tests/CalibrationSuite.Tests/CalibrationSuite.Tests.csproj -c Release --no-build --no-restore --filter 'Category!=LiveDaemon'
+dotnet build CalibrationSuite.slnx -c Debug
+dotnet test tests/CalibrationSuite.Tests/CalibrationSuite.Tests.csproj -c Debug --no-build --filter 'Category!=LiveDaemon'
+dotnet build CalibrationSuite.slnx -c Release
 ~~~
 
-Preparation verifies source hashes and copies unmodified OTD sources to ignored artifacts/otd-source; it does not build/edit the adjacent repository. NuGet packages stay under artifacts/packages; lock files and fixed OTD BuildDate make inputs repeatable.
+Keep the Calibrator's complete **src/CalibrationSuite.Calibrator/bin/Release/net8.0-windows** folder together, including DLLs and notices. The user needs a running compatible OTD 0.6.7 daemon, but never source code or build tools. Runtime dependency redistribution review remains part of milestone 5; this is a development output, not a published release.
 
-The runnable executable is src/CalibrationSuite.Calibrator/bin/Release/net8.0-windows/CalibrationSuite.Calibrator.exe. Keep the complete output directory together. The filter ZIP is `artifacts/filter-package/CalibrationSuite.zip`. Rebuild and repackage before tests: the package test installs this ZIP into an isolated temporary OTD data directory, without touching your installed daemon or settings.
+The source revision and archive checksum are in **dependencies/otd/source.json**. OTD project definitions and package locks are committed there so editors can load all ten projects before the source download. Source files are unmodified and cached under **artifacts/otd-source**; NuGet packages are under **artifacts/packages**. The filter uses the official OTD Plugin package. See [dependency maintenance](docs/DEPENDENCIES.md) and [build workflow verification](docs/BUILD-WORKFLOW.md).
+
+An optional read-only installed-daemon check:
+
+~~~powershell
+$env:CALIBRATION_LIVE_OTD = '1'
+dotnet test tests/CalibrationSuite.Tests/CalibrationSuite.Tests.csproj -c Debug --no-build --filter Category=LiveDaemon --logger 'console;verbosity=detailed'
+Remove-Item Env:CALIBRATION_LIVE_OTD
+~~~
 
 ## Install and review the filter
 
-In OTD 0.6.7, open **Plugins → Plugin Manager**, choose **Install plugin...** (or drag the ZIP into that window), and select `artifacts/filter-package/CalibrationSuite.zip`. Keep the stable ZIP filename when updating. The package includes the filter, shared core, NetTopologySuite, metadata, and notices; it does not replace OTD assemblies. Update/removal use the same Plugin Manager.
+In OTD 0.6.7, open **Plugins → Plugin Manager**, choose **Install plugin...** (or drag the ZIP into that window), and select `artifacts/filter-package/Release/CalibrationSuite.zip`. Keep the stable ZIP filename when updating. The package includes the filter, shared core, NetTopologySuite, metadata, and notices; it does not replace OTD assemblies. Update/removal use the same Plugin Manager.
 
 In the intended tablet profile's **Filters** tab, add **Calibration Suite** and keep exactly one enabled entry. It runs at **PreTransform** and must receive unchanged parsed position and tilt: position/tilt-changing filters must not precede it. Configure ordering in OTD; the Calibrator does not inspect it. Same-name tablets share an OTD profile, so confirm the destination tablet and pen yourself.
 

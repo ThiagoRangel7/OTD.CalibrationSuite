@@ -29,7 +29,7 @@ Covered spec areas: section 1 workflow/acquisition/mapping, section 2 preview ge
 Exact current validation commands, from the repository:
 
 ~~~powershell
-dotnet build CalibrationSuite.sln -c Release --no-restore -p:BuildDate=2026-09-12
+dotnet build CalibrationSuite.slnx -c Release --no-restore
 dotnet test tests/CalibrationSuite.Tests/CalibrationSuite.Tests.csproj -c Release --no-build --no-restore --filter 'Category!=LiveDaemon' --logger 'trx;LogFileName=milestone1.trx'
 $env:CALIBRATION_LIVE_OTD = '1'
 dotnet test tests/CalibrationSuite.Tests/CalibrationSuite.Tests.csproj -c Release --no-build --no-restore --filter Category=LiveDaemon --logger 'console;verbosity=detailed' --logger 'trx;LogFileName=live-daemon.trx'

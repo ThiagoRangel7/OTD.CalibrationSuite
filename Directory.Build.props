@@ -6,7 +6,8 @@
     <LangVersion>12</LangVersion>
     <Deterministic>true</Deterministic>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestoreLockedMode>true</RestoreLockedMode>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <OtdSource>$(MSBuildThisFileDirectory)artifacts/otd-source</OtdSource>
+    <OtdProjects>$(MSBuildThisFileDirectory)dependencies/otd</OtdProjects>
   </PropertyGroup>
 </Project>

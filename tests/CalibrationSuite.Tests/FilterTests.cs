@@ -38,10 +38,12 @@ public class FilterTests
         try
         {
             var root = new DirectoryInfo(AppContext.BaseDirectory);
-            while (root != null && !File.Exists(Path.Combine(root.FullName, "CalibrationSuite.sln"))) root = root.Parent;
+            while (root != null && !File.Exists(Path.Combine(root.FullName, "CalibrationSuite.slnx"))) root = root.Parent;
             Assert.NotNull(root);
-            var package = Path.Combine(root.FullName, "artifacts/filter-package/CalibrationSuite.zip");
-            Assert.True(File.Exists(package), "Run scripts/Package-Filter.ps1 after the Release build before tests.");
+            var configuration = typeof(FilterTests).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyConfigurationAttribute), false)
+                .Cast<System.Reflection.AssemblyConfigurationAttribute>().Single().Configuration;
+            var package = Path.Combine(root.FullName, "artifacts/filter-package", configuration, "CalibrationSuite.zip");
+            Assert.True(File.Exists(package), "Build the filter project to generate its package before running tests.");
             AppInfo.Current = new AppInfo { AppDataDirectory = directory };
             AppInfo.PluginManager = new DesktopPluginManager();
             Assert.True(AppInfo.PluginManager.InstallPlugin(package));
@@ -49,6 +51,7 @@ public class FilterTests
             Assert.Equal("Calibration Suite", context.GetMetadata().Name);
             Assert.Equal(new[] { "CalibrationSuite.Core.dll", "CalibrationSuite.Filter.dll", "NetTopologySuite.dll" },
                 context.Directory.GetFiles("*.dll").Select(f => f.Name).OrderBy(n => n));
+            Assert.Equal(configuration == "Debug" ? 2 : 0, context.Directory.GetFiles("*.pdb").Length);
             var type = Assert.Single(AppInfo.PluginManager.PluginTypes, t => t.FullName == typeof(CalibrationFilter).FullName);
             var store = new PluginSettingStore(type);
             store[nameof(CalibrationFilter.CalibrationJson)].SetValue(CoreFixtures.Data().ToJson());

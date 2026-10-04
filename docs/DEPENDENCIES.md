@@ -2,7 +2,7 @@
 
 ## Source and API compatibility
 
-The adjacent OTD 0.6.7 source tree targets .NET 8 and is pinned by scripts/otd-source.sha256. Desktop, core, Plugin, Configurations, and Native assemblies build from an unmodified workspace copy. No UX/Eto assembly is referenced. Initialization follows OTD's application-info/plugin-manager sequence; no settings, profile, output-mode, or installer APIs are called.
+OTD 0.6.7 source is pinned by commit and archive SHA-256 in dependencies/otd/source.json. Desktop, core, Plugin, Configurations, and Native assemblies build from automatically downloaded, unmodified source files. Their upstream project definitions are committed under dependencies/otd so the solution can load before downloading; Directory.Build.targets attaches source files and resources and fixes the build date. The filter instead references the official OpenTabletDriver.Plugin 0.6.7 NuGet package, excluding its runtime assets from the plugin package. No UX/Eto assembly is referenced. Initialization follows OTD's application-info/plugin-manager sequence; no settings, profile, output-mode, or installer APIs are called.
 
 CalibrationSuite.Otd isolates raw RPC acquisition from the shared core and WPF. It reconstructs OTD reports using DebugReportData.ToObject and identifies the single connected tablet by reference contents. A synthetic RPC daemon lacking settings methods exercises the same path. The old profile snapshots, mapping preflight, output-mode construction, and settings polling were removed following the explicitly approved 2026-09-13 workflow revision.
 
@@ -26,7 +26,7 @@ Each target's raw X/MaxX and Y/MaxY fractions multiply the full preview's WPF Ac
 
 ## Dependencies and deployment
 
-Versions and content hashes, including transitive dependencies, are captured in project lock files and `scripts/otd-locks`. Relevant package metadata inspected locally:
+Versions and content hashes, including transitive dependencies, are captured in project lock files, including those under `dependencies/otd`. Relevant package metadata inspected locally:
 
 | Dependency | Version | Declared license / role |
 | --- | --- | --- |
@@ -46,7 +46,7 @@ Versions and content hashes, including transitive dependencies, are captured in 
 
 Other restored Microsoft, MessagePack, and Nerdbank runtime packages declare MIT. `xunit.abstractions` 2.0.3 uses a legacy upstream license URL in its metadata. HidSharpCore source files carry an [Apache-2.0 header](https://github.com/OpenTabletDriver/HIDSharpCore/blob/master/HidSharp/ImplementationDetail.cs), but the 1.3.0 package lacks license metadata and the exact recorded commit's license text was not retrieved. Treat package notice verification as an outstanding distribution check, not as permission inferred from a current source file.
 
-Development deployment requires the complete Calibrator build output and the .NET 8 Windows Desktop runtime. The correction filter references the host's OTD Plugin assembly with `Private=false`. Milestone 3 packages only CalibrationSuite.Filter, CalibrationSuite.Core, and NetTopologySuite 2.6.0, with metadata and the complete pinned upstream NetTopologySuite license notice. No OTD, RPC, WPF, or HidSharpCore binaries are included in the filter ZIP. The package script uses an explicit file list and fixed ZIP timestamps. No dependencies or lock versions changed and no release artifact has been published. Calibrator distribution/license checks and live install/update/removal verification remain delivery work.
+Development deployment requires the complete Calibrator build output and the .NET 8 Windows Desktop runtime. The correction filter uses the host's OTD Plugin assembly at runtime. Milestone 3 packages only CalibrationSuite.Filter, CalibrationSuite.Core, and NetTopologySuite 2.6.0, with metadata and the complete pinned upstream NetTopologySuite license notice. No OTD, RPC, WPF, or HidSharpCore binaries are included in the filter ZIP. The package script uses an explicit file list and fixed ZIP timestamps. The build-workflow revision adds the official Plugin package; existing transitive dependency versions remain pinned. No release artifact has been published. Calibrator distribution/license checks and live install/update/removal verification remain delivery work.
 
 ## Acquisition limits
 
@@ -55,3 +55,14 @@ The queue holds 512 events and a background consumer awaits reports directly, wi
 RPC waits and ordered enable→disable cleanup are bounded to three seconds. A late enable reply still triggers its disable. Unconfirmed cleanup or a worker that fails to stop blocks another preview until restart. This is necessary because OTD exposes no debug ownership token and third-party deserializers cannot safely be aborted in-process.
 
 The main screen retries connection/single-tablet detection automatically while idle. Debug is enabled only after Start and stopped on exit. OTD's public RpcClient has no cancellation/disposal API for pending pipe connection attempts, so a timed-out attempt is reused; closing the process releases it. No GetSettings polling or Resynchronize handling is necessary for the independent mapping.
+
+
+## Updating the dependency
+
+Use one reviewed OTD release for both the Plugin NuGet version and source commit. Never float to latest. Update source.json with the immutable commit and verified ZIP checksum, replace the five upstream project definitions and Upstream.props verbatim, review their changes, and refresh package locks deliberately with RestoreLockedMode=false. Normal builds must use locked restoration. Delete only the generated artifacts/otd-source folder to force verification of the new definitions. Do not patch downloaded source.
+
+Run Debug and Release builds, both test configurations, package loading, and live daemon checks before claiming support for a new release. A compatible version number alone does not establish parser/plugin compatibility. This build change does not replace OTD report reconstruction or introduce a custom protocol.
+
+Git preserves the upstream project-definition bytes for checksum comparison. The verified source archive is cached, extraction is serialized across parallel build processes, and a completion marker is written only after project definitions match. No source download runs during editor design-time evaluation. Build once to populate source navigation.
+
+The standard Windows OTD release contains single-file executables rather than standalone library DLLs; this is why Desktop remains source-built. Dependency preparation is build infrastructure, not an OTD requirement. The original neighboring checkout is no longer needed.

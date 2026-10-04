@@ -28,8 +28,8 @@ Covered requirements: spec section 2 layout/orientation math, section 4 interpol
 From the repository on Windows with the README prerequisites and prepared OTD sources:
 
 ~~~powershell
-dotnet restore CalibrationSuite.sln --locked-mode --force
-dotnet build CalibrationSuite.sln -c Release --no-restore -p:BuildDate=2026-09-12
+dotnet restore CalibrationSuite.slnx --locked-mode --force
+dotnet build CalibrationSuite.slnx -c Release --no-restore
 dotnet test tests/CalibrationSuite.Tests/CalibrationSuite.Tests.csproj -c Release --no-build --no-restore --filter 'Category!=LiveDaemon' --logger 'trx;LogFileName=milestone2.trx'
 git diff --check
 ~~~

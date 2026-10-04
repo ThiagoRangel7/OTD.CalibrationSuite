@@ -2,6 +2,17 @@
   "version": 1,
   "dependencies": {
     "net8.0": {
+      "OpenTabletDriver.Plugin": {
+        "type": "Direct",
+        "requested": "[0.6.7, )",
+        "resolved": "0.6.7",
+        "contentHash": "jszqDn5QZzD9P1IB63rUo2x++KAGJ11ft+gX1KJq3T37BNNz9f/CjU/gxCuivlGHoPb9pyxijM/Ka0lCrxaC8Q==",
+        "dependencies": {
+          "JetBrains.Annotations": "2025.2.4",
+          "Newtonsoft.Json": "13.0.4",
+          "System.ComponentModel.Annotations": "5.0.0"
+        }
+      },
       "JetBrains.Annotations": {
         "type": "Transitive",
         "resolved": "2025.2.4",
@@ -26,14 +37,6 @@
         "type": "Project",
         "dependencies": {
           "NetTopologySuite": "[2.6.0, )"
-        }
-      },
-      "opentabletdriver.plugin": {
-        "type": "Project",
-        "dependencies": {
-          "JetBrains.Annotations": "[2025.2.4, )",
-          "Newtonsoft.Json": "[13.0.4, )",
-          "System.ComponentModel.Annotations": "[5.0.0, )"
         }
       }
     }

@@ -1,0 +1,24 @@
+<Solution>
+  <Configurations>
+    <Platform Name="Any CPU" />
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Folder Name="/dependencies/" />
+  <Folder Name="/dependencies/otd/">
+    <Project Path="dependencies/otd/OpenTabletDriver.Configurations/OpenTabletDriver.Configurations.csproj" />
+    <Project Path="dependencies/otd/OpenTabletDriver.Desktop/OpenTabletDriver.Desktop.csproj" />
+    <Project Path="dependencies/otd/OpenTabletDriver.Native/OpenTabletDriver.Native.csproj" />
+    <Project Path="dependencies/otd/OpenTabletDriver.Plugin/OpenTabletDriver.Plugin.csproj" />
+    <Project Path="dependencies/otd/OpenTabletDriver/OpenTabletDriver.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/CalibrationSuite.Calibrator/CalibrationSuite.Calibrator.csproj" />
+    <Project Path="src/CalibrationSuite.Core/CalibrationSuite.Core.csproj" />
+    <Project Path="src/CalibrationSuite.Filter/CalibrationSuite.Filter.csproj" />
+    <Project Path="src/CalibrationSuite.Otd/CalibrationSuite.Otd.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CalibrationSuite.Tests/CalibrationSuite.Tests.csproj" />
+  </Folder>
+</Solution>
