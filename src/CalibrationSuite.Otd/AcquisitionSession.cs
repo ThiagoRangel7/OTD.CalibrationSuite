@@ -22,6 +22,7 @@ public sealed class AcquisitionSession
     public ReportReading? Latest => Volatile.Read(ref latest) is { } reading
         && Stopwatch.GetElapsedTime(reading.Timestamp).TotalMilliseconds < 500 ? reading : null;
     public bool RestartRequired { get; private set; }
+    public event Action<ReportReading>? Reading;
 
     public AcquisitionSession(IAcquisitionDaemon daemon, TabletReference tablet,
         AcquisitionOptions? options = null, Func<DebugReportData, long, ReportReading>? reconstruct = null)
@@ -37,7 +38,7 @@ public sealed class AcquisitionSession
         { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
     }
 
-    public void Cancel(string message = "Preview cancelled.")
+    public void Cancel(string message = "Capture stopped. Unfinished measurements are available for review or resume.")
     {
         Interlocked.CompareExchange(ref reason, message, null);
         stop.Cancel();
@@ -50,7 +51,7 @@ public sealed class AcquisitionSession
         if (stop.IsCancellationRequested) return;
         // Timestamp at ingress, before filtering/reconstruction. No hardware timing is available.
         if (!queue.Writer.TryWrite((report, Stopwatch.GetTimestamp())))
-            Cancel("Report queue overflow. Preview cancelled; retry after reducing system load.");
+            Cancel("Report queue overflow. Acquisition cancelled; retry after reducing system load.");
     }
 
     // Session cleanup must not depend on the caller's UI synchronization context.
@@ -77,9 +78,9 @@ public sealed class AcquisitionSession
         }
         catch (OperationCanceledException) when (stop.IsCancellationRequested)
         {
-            reason ??= "Report consumer stalled. Preview cancelled; restart Calibrator if the parser does not stop.";
+            reason ??= "Report consumer stalled. Acquisition cancelled; restart Calibrator if the parser does not stop.";
         }
-        catch (Exception ex) { Cancel($"Preview stopped: {ex.Message}"); }
+        catch (Exception ex) { Cancel($"Acquisition stopped: {ex.Message}"); }
         finally
         {
             stop.Cancel();
@@ -113,7 +114,7 @@ public sealed class AcquisitionSession
                 catch { /* The worker failure or cancellation has already ended this session. */ }
             }
         }
-        return reason ?? "Preview ended.";
+        return reason ?? "Acquisition ended.";
     }
 
     private TimeSpan RpcTimeout => TimeSpan.FromMilliseconds(options.RpcTimeoutMilliseconds);
@@ -143,7 +144,8 @@ public sealed class AcquisitionSession
             {
                 var reading = reconstruct(item.Data, item.Timestamp);
                 stop.Token.ThrowIfCancellationRequested();
-                Volatile.Write(ref latest, reading);
+                if (reading.Kind != ReadingKind.Auxiliary) Volatile.Write(ref latest, reading);
+                Reading?.Invoke(reading);
             }
             // Waiting for the next report is ordinary pen absence, not a stalled parser.
             stop.CancelAfter(Timeout.InfiniteTimeSpan);

@@ -95,7 +95,7 @@ azimuth[k]  = 360 * k / A              k = 0..A-1
 captures   = R * C * (1 + A * N)      default: 153
 ```
 
-Add upright once per node; show total captures before starting. Require integer counts (`R,C >= 2`, `A,N >= 0`; when both are positive, `A >= 3`), positive sampling/stability parameters, `CaptureTimeoutMs > CaptureWindowMs`, `0 < M < 90`, and, when capturing non-upright poses, altitude/azimuth spacing greater than twice the angle tolerance. If either A or N is zero, capture only upright at each target (R*C captures); skip non-upright pose generation and spacing checks. Verify usable varying tilt for full tilt calibration: `ITiltReport` declares no attainable range. Explain rejection of incompatible settings or inadequate orientation coverage.
+Add upright once per node; show total captures before starting. Require integer counts (`R,C >= 2`, `A,N >= 0`; when both are positive, `A >= 3`), positive sampling/stability parameters, `CaptureTimeoutMs > CaptureWindowMs`, `0 < M < 90`, angle tolerance below 90 degrees, and, when capturing non-upright poses, altitude/azimuth spacing greater than twice the angle tolerance. If either A or N is zero, capture only upright at each target (R*C captures); skip non-upright pose generation and spacing checks. Limit a session to 10,000 captures and reject larger layouts before allocation. Verify usable varying tilt for full tilt calibration: `ITiltReport` declares no attainable range. Explain rejection of incompatible settings or inadequate orientation coverage.
 
 ### Grid
 
@@ -108,7 +108,7 @@ X[c] = mx + c / (C - 1) * (Wraw - 2 * mx)
 Y[r] = my + r / (R - 1) * (Hraw - 2 * my)
 ```
 
-Persist resolved grid coordinates; reject invalid geometry/insets without silently changing layout. Visit nodes top-left to bottom-right, capturing upright then all azimuths at successive lean levels. Show only the active target.
+Persist resolved grid coordinates; reject invalid geometry/insets without silently changing layout. Visit nodes top-left to bottom-right, capturing upright, then every altitude for azimuth 1, every altitude for azimuth 2, and so on before the next node. Show only the active target.
 
 ### Angles for guidance and gates
 
@@ -129,6 +129,8 @@ azimuth  = wrap360(atan2(sy, -sx) in degrees)
 
 Verify device axis semantics/signs in all four directions and upright; never assume raw signs match this projection. Guidance conversion never alters stored/interpolated tilt; runtime needs no derived angles. OTD's `DisableTilt` only controls pointer tilt forwarding and need not change for acquisition.
 
+The initial capture adapter supports the user-verified Huion Kamvas 13 (Gen 3) with OTD's Giano parser/report: `sx = -tan(TiltX)` and `sy = tan(TiltY)`, using degrees. Reject nonfinite axes or magnitudes at least 90 degrees. Other tablet/parser combinations remain unavailable for capture until their orientation semantics are established; do not reuse this projection by guessing. Cardinal signs are recorded in docs/MILESTONE1.md. Known-angle scale, diagonal physical conversion, and attainable poses remain device review checks; mathematical conversion tests cannot establish them.
+
 ## 3. Capture, review, and UI
 
 Start with no accepted working calibration. Keep unfinished capture sessions, completed candidates, and accepted working data separately in memory for this app session. Do not read previously saved data from OTD, compare applied contents, or add calibration-file import/export. Closing the app loses these measurements unless the user has pasted and saved them in OTD.
@@ -142,7 +144,7 @@ Working calibration means the Calibrator's accepted in-memory dataset, not the c
 1. `Space` starts one burst; suppress autorepeat/overlap.
 2. Require finite position and tilt in the same eligible pen report. Ignore unrelated auxiliary reports; reject out-of-range, reported proximity loss, and eraser input via available OTD interfaces. Never combine reports or reuse stale tilt. Pressure neither triggers capture nor requires a positive threshold.
 3. Gate every report without prediction/smoothing: upright altitude must be within tolerance of 90; other poses require altitude and circular azimuth within tolerance. Any gate failure discards the attempt.
-4. Collect until **both** duration and sample minima are met, within gap/total timeouts. Use a monotonic local clock; count each event once, including identical repeats. Without hardware timestamps/sequences, some upstream loss is undetectable. A report gap during a burst rejects that burst with a retry message; pen absence between bursts preserves progress. Actual disconnects or blocked processing stop acquisition.
+4. Collect until **both** duration and sample minima are met, within gap/total timeouts. Measure sample duration from the first eligible report; total timeout and the initial report gap start at the key press. Exclude queued reports received before the trigger. Use a monotonic local clock; count each event once, including identical repeats. Without hardware timestamps/sequences, some upstream loss is undetectable. A report gap during a burst rejects that burst with a retry message; pen absence between bursts preserves progress. Actual disconnects or blocked processing stop acquisition.
 5. Compute component-wise position X/Y and tilt X/Y medians over the same burst; average the middle two for even counts. For each report, compute Euclidean distances from median position (convert each displacement axis independently to mm) and median tilt (raw degrees). Sort each list; the 95th percentile is one-based rank `ceil(0.95 * count)`. Reject if either stability limit is exceeded; never accept by trimming outliers.
 6. Store median position/tilt, which represent the burst but need not match an individual report. Never substitute requested poses or use linear medians of wrapped azimuth as interpolation coordinates.
 
@@ -157,11 +159,13 @@ The opaque full-screen WPF window must remain responsive during pen contact and 
 | Space     | Attempt capture                                 |
 | Backspace | Recapture previous pose, including across nodes |
 | R         | Restart unfinished session                      |
-| Esc       | Cancel and return to main screen                |
+| Esc       | Cancel the active burst, return to main, retain completed measurements for resume/review |
 
 Main screen shows automatic connection readiness, the single tablet name, and session/candidate/accepted-data state. It does not show profile/display selectors, filter status, Default/Calibrated classification of OTD data, or applied/saved/runtime status.
 
 Main actions: Calibrate, Review Calibration, and Copy Calibration. In milestone 1 only, label the entry Start preview because measurements are not yet captured. Connect automatically without a Connect/Refresh button. Review opens current-session measurements; Copy uses accepted data and instructs the user to paste into the intended OTD profile's Calibration data field and Save.
+
+Show Resume Capture for an unfinished session; its settings remain those captured at Start. Resume uses fresh tablet/display geometry and requires matching digitizer geometry. Starting a new calibration explicitly discards unaccepted data after confirmation. Review can discard unfinished/candidate data while preserving accepted data. Targeted recapture begins from a completed candidate or accepted result, copies it, and clears only the selected pose/node in the draft. During targeted recapture, R restarts that selection. Backspace during ordinary capture can cross node boundaries. Pending data and accepted measurements always cause a close reminder, even after Copy; the app cannot observe whether OTD was saved.
 
 Use OTD for reset, enable/disable, backup/restore, and presets. Add no Calibrator Import/Export, Reset Working Calibration, or Apply/Save actions. Runtime filter loading still validates persisted calibration through the shared core.
 

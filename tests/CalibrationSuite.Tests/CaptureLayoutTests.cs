@@ -17,8 +17,9 @@ public class CaptureLayoutTests
         Assert.Equal(153, grid.PreTransformRowCoordinates.Length * grid.PreTransformColumnCoordinates.Length * poses.Length);
         Assert.Equal(new RequestedPose(90), poses[0]);
         Assert.Equal(new RequestedPose(70, 0), poses[1]);
-        Assert.Equal(new RequestedPose(70, 315), poses[8]);
-        Assert.Equal(new RequestedPose(50, 0), poses[9]);
+        Assert.Equal(new RequestedPose(50, 0), poses[2]);
+        Assert.Equal(new RequestedPose(70, 45), poses[3]);
+        Assert.Equal(new RequestedPose(70, 315), poses[15]);
         Assert.Equal(new RequestedPose(50, 315), poses[^1]);
     }
 

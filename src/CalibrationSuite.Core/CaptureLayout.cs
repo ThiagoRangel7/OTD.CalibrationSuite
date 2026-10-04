@@ -2,6 +2,7 @@ namespace CalibrationSuite.Core;
 
 public sealed record CaptureSettings
 {
+    public const int MaximumCaptures = 10000;
     public int RowCount { get; init; } = 3;
     public int ColumnCount { get; init; } = 3;
     public double GridInsetMm { get; init; } = 15;
@@ -16,6 +17,18 @@ public sealed record CaptureSettings
     public int ReportGapTimeoutMs { get; init; } = 500;
     public int CaptureTimeoutMs { get; init; } = 2000;
     private bool HasTiltPoses => AzimuthCount > 0 && NonUprightAltitudeCount > 0;
+    public int TotalCaptures
+    {
+        get
+        {
+            try
+            {
+                int count = checked(RowCount * ColumnCount * (HasTiltPoses ? checked(1 + AzimuthCount * NonUprightAltitudeCount) : 1));
+                return count <= MaximumCaptures ? count : throw new CalibrationException($"Use at most {MaximumCaptures:N0} captures per session.");
+            }
+            catch (OverflowException) { throw new CalibrationException("Capture counts are too large."); }
+        }
+    }
 
     public void Validate()
     {
@@ -25,11 +38,12 @@ public sealed record CaptureSettings
         if (!new[] { GridInsetMm, MinAltitudeDeg, AngleToleranceDeg, PositionStabilityMm, TiltStabilityDeg }
                 .All(v => double.IsFinite(v) && v > 0)
             || CaptureWindowMs <= 0 || MinSamplesPerCapture <= 0 || ReportGapTimeoutMs <= 0
-            || CaptureTimeoutMs <= CaptureWindowMs || MinAltitudeDeg >= 90)
+            || CaptureTimeoutMs <= CaptureWindowMs || MinAltitudeDeg >= 90 || AngleToleranceDeg >= 90)
             throw new CalibrationException("Capture parameters must be positive and finite, minimum altitude below 90, and timeout longer than the burst.");
         if (HasTiltPoses && ((90 - MinAltitudeDeg) / NonUprightAltitudeCount <= 2 * AngleToleranceDeg
             || 360.0 / AzimuthCount <= 2 * AngleToleranceDeg))
             throw new CalibrationException("Altitude and azimuth spacing must exceed twice the angle tolerance.");
+        _ = TotalCaptures;
     }
 
     public CalibrationGrid CreateGrid(SourceGeometry geometry)
@@ -48,8 +62,8 @@ public sealed record CaptureSettings
         Validate();
         var poses = new List<RequestedPose> { new(90) };
         if (!HasTiltPoses) return poses.ToArray();
-        for (int level = 1; level <= NonUprightAltitudeCount; level++)
-            for (int azimuth = 0; azimuth < AzimuthCount; azimuth++)
+        for (int azimuth = 0; azimuth < AzimuthCount; azimuth++)
+            for (int level = 1; level <= NonUprightAltitudeCount; level++)
                 poses.Add(new(90 - level * (90 - MinAltitudeDeg) / NonUprightAltitudeCount,
                     360.0 * azimuth / AzimuthCount));
         return poses.ToArray();
@@ -58,6 +72,20 @@ public sealed record CaptureSettings
 
 public static class OrientationGuidance
 {
+    public static RequestedPose FromAngularTilt(Point2 tilt, double screenXSign, double screenYSign, double uprightToleranceDeg)
+    {
+        if (!tilt.IsFinite || Math.Abs(tilt.X) >= 90 || Math.Abs(tilt.Y) >= 90
+            || Math.Abs(screenXSign) != 1 || Math.Abs(screenYSign) != 1)
+            throw new CalibrationException("Tilt is outside the supported signed angular range (-90, 90).");
+        return FromScreenTangents(new(screenXSign * Math.Tan(tilt.X * Math.PI / 180),
+            screenYSign * Math.Tan(tilt.Y * Math.PI / 180)), uprightToleranceDeg);
+    }
+
+    public static bool WithinTolerance(RequestedPose current, RequestedPose requested, double tolerance) =>
+        Math.Abs(current.AltitudeDeg - requested.AltitudeDeg) <= tolerance
+        && (requested.AzimuthDeg == null || current.AzimuthDeg is { } azimuth
+            && AzimuthDistance(azimuth, requested.AzimuthDeg.Value) <= tolerance);
+
     // Input is already converted to screen-aligned tip-to-eraser tangents by a device-verified adapter.
     // This API deliberately makes no assumptions about OTD's raw tilt signs or axis order.
     public static RequestedPose FromScreenTangents(Point2 tangents, double uprightToleranceDeg)

@@ -4,7 +4,7 @@
 
 `SPEC.md` guides product behavior; this plan records implementation order and progress. Prefer simpler approaches when they preserve important behavior, and update these documents when a better approach replaces an earlier design. The user's 2026-09-13 simplification request explicitly authorizes this judgment. Avoid speculative features, defensive layers, and tests that merely repeat implementation details.
 
-Milestones describe feature scope. The 2026-09-13 request to implement the next milestone authorizes milestone 3 following the milestone 2 review. Capture remains milestone 4. Work autonomously within the user's authorized scope.
+Milestones describe feature scope. The 2026-10-04 request "Implement milestone 4 cleanly" authorizes guided capture and review following the successful milestone 3 checks. Work autonomously within that scope. Delivery remains milestone 5.
 
 Before work, inspect the working tree and recorded findings, and identify the relevant behavior and checks. Committed code, uncommitted changes, tests, and these documents are all open to improvement under the user's simplification request; none is a design constraint merely because it already exists.
 
@@ -79,8 +79,8 @@ Implement:
 
 Retain the full tilt interpolation approach following the 2026-09-13 discussion. The upright-only core extension is complete; carry the remaining UI and capture items forward as marked below:
 
-- **Requested capture order:** upright, then all altitude levels for azimuth 1, all levels for azimuth 2, and so on, before the next crosshair. Update the spec traversal sentence, CreatePoses, and order tests together when implementing capture. This changes guidance order only, not mesh construction.
-- **Upright-only core implemented in milestone 2:** zero non-upright altitude levels or zero azimuths generate only upright. A single measured sample supplies a constant node error through the existing spatial blend and current schema; multi-sample nodes keep their mesh checks. Tests cover loading, evaluation, invalid counts/data, and mixed nodes. Expose the controls and enforce upright pose capture in milestone 4.
+- **Capture order implemented:** upright, then all altitude levels for azimuth 1, all levels for azimuth 2, and so on, before the next crosshair. Spec traversal, CreatePoses, and order tests now agree. This changes guidance order only, not mesh construction.
+- **Upright-only capture implemented:** zero non-upright altitude levels or zero azimuths generate only upright. A single measured sample supplies a constant node error through the existing spatial blend and current schema; multi-sample nodes keep their mesh checks. Tests cover loading, evaluation, invalid counts/data, and mixed nodes. Milestone 4 exposes the controls and enforces the upright pose gate.
 - **Confirmed burst acceptance:** retain the current spec: every eligible report must satisfy pose tolerance, followed by burst medians and position/tilt stability checks. Keep gap/duration/sample limits. The proposed median-only pose gate was declined.
 - **Presentation idea for later evaluation:** an arrow continuing from the pen tip toward a target point/sphere. Work out depth readability and explicitly reconcile its eraser-to-tip direction with the spec's tip-to-eraser azimuth convention. No 3D UI or rendering dependency is committed by this note.
 
@@ -137,11 +137,11 @@ States: Not started → In progress → Awaiting user review → Approved. Revie
 | --- | --- | --- | --- |
 | 1: Build, acquisition, mapping | Approved | Simplified workflow implemented; 25 synthetic tests and read-only device detection passed at that milestone. Basic physical checklist reported passing by the user on 2026-09-13; cardinal tilt signs recorded. Additional configurations and angle-scale/accuracy checks remain in docs/MILESTONE1.md. | User explicitly requested "Implement milestone 2" on 2026-09-13. Approval to advance is not device verification. |
 | 2: Data and correction core | Approved | Calibration data, layout, immutable measured meshes, and correction evaluator implemented. Locked restore, Release build, and 93 synthetic tests passed. See docs/MILESTONE2.md. | User requested "Implement the next milestone" on 2026-09-13, authorizing milestone 3. This is not physical-device verification. |
-| 3: Filter and package | Awaiting user review | Positioned correction filter, injected snapshot activation, bounded diagnostics, and standard ZIP package implemented. User reported build and live identity-data review checks passing on 2026-10-03; see docs/MILESTONE3.md. Measured correction awaits capture. | Implementation authorized on 2026-09-13; milestone 4 not started. |
-| 4: Capture and review | Not started | — | — |
+| 3: Filter and package | Approved | Positioned correction filter, injected snapshot activation, bounded diagnostics, and standard ZIP package implemented. User reported build and live identity-data review checks passing on 2026-10-03; see docs/MILESTONE3.md. | User requested milestone 4 on 2026-10-04. Approval to advance is not measured-correction verification. |
+| 4: Capture and review | Awaiting user review | Guided capture, burst gates, review/recapture, candidate acceptance, and accepted-data copying implemented. Debug/Release builds and 133 non-live tests per configuration passed; offscreen WPF renders and acceptance checks passed. See docs/MILESTONE4.md. | Implementation authorized on 2026-10-04; physical review and acceptance pending. |
 | 5: Audit and delivery | Not started | — | — |
 
-Current stop: milestone 3 review checks passed per user report on 2026-10-03; ready for the next implementation instruction. See docs/MILESTONE3.md for evidence and remaining measured-correction/delivery checks. Capture UI remains milestone 4 and has not started.
+Current stop: milestone 4 user review. Implementation and automated checks are complete. The next user review covers capture usability, data preservation, known-angle guidance, and real measured correction. Milestone 5 has not started.
 
 2026-09-13 simplification review:
 
@@ -163,3 +163,5 @@ Current stop: milestone 3 review checks passed per user report on 2026-10-03; re
 - Milestone 4 has not started. The user subsequently reported the milestone 3 live identity-data checks passing on 2026-10-03.
 
 2026-10-03 user review: build/editor checks, Release ZIP installation, filter/property presentation, empty-data enable/bypass, Apply/Save, persistence after OTD restart, and Console inspection all reported passing. Recorded as user-verified, without claiming measured correction accuracy or interactive breakpoint verification. Existing staged infrastructure changes are preserved; milestone 4 remains not started.
+
+2026-10-04 milestone 4: implemented capture settings/traversal, serialized per-report burst gates and medians/stability, keyboard capture/recovery, current-session review and targeted recapture, accepted-data copying, and close reminders. Guidance is limited to the Huion/Giano semantics already recorded; physical angular scale, diagonals, and correction accuracy remain review checks. Both builds and 133 non-live tests per configuration passed, together with offscreen WPF layout/acceptance checks. See docs/MILESTONE4.md. Changes are not committed.

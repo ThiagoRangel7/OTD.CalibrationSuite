@@ -1,0 +1,42 @@
+# Milestone 4 — guided capture and review
+
+Implemented following the 2026-10-04 request to implement milestone 4. Automated verification is complete; awaiting user review and acceptance. Physical review remains pending.
+
+## Behavior
+
+- Main actions are Calibrate, Review Calibration, and Copy Calibration, with Resume Capture when interrupted measurements exist. Basic and advanced controls expose all specified capture settings and a total-count preview. Either zero pose count gives upright-only capture. Session layouts are capped at 10,000 measurements to reject excessive allocations before starting.
+- At each row-major target, capture upright and then all altitude levels for each successive azimuth. Only the active crosshair is shown. The information panel moves to the opposite vertical side and scales text on shorter viewports. Full-screen placement still uses Windows monitor bounds and WPF-local raw-coordinate fractions.
+- Space begins one attempt; repeated/overlapping presses cannot create overlapping bursts. Backspace revisits the previous pose across nodes, R restarts the current capture/recapture selection, and Esc ends acquisition while preserving completed measurements for resume/review. Full-screen mouse, pen, touch, and stylus gestures are handled without activating controls.
+- Every reconstructed eligible report reaches the capture controller on the existing background consumer. The WPF timer displays snapshots only. Commands and report processing share a short capture lock; no WPF/RPC dependencies enter the shared core. Auxiliary reports neither supply samples nor refresh the eligible-report gap. Pen absence between bursts preserves progress; report/pose/stability failures discard only the active burst.
+- Bursts require same-report finite position/tilt, valid pen eligibility, and per-report pose gates. Pressure never starts or gates a capture. Duration starts at the first eligible report; total timeout and the first-report gap start at Space. Pre-trigger queued reports are excluded. Identical events count separately. Exact limit boundaries are inclusive; exceeding a limit rejects the attempt.
+- Stored position/tilt are component medians (even counts average both middle values). Position distances convert X and Y independently to millimeters; tilt distances remain raw degrees. Both use rank ceil(0.95 × count), with no trimmed mean or replacement by requested poses.
+- Capture rejects near-duplicate measured tilts, unusable meshes, missing origin coverage, or an upright measurement outside the measured hull. The same core evaluator validates completed candidates and copied payloads.
+- Unfinished, candidate, and accepted data are separate. Targeted recapture clones the selected candidate/accepted result and replaces only that pose/node. Failed attempts and discard preserve accepted data; only Accept Calibration replaces it. Review shows requested poses, target/raw position, measured tilt, and raw error.
+- Copy uses accepted data only and displays paste-and-Save instructions. Close reminders remain after Copy because the app cannot observe OTD persistence. There is no calibration loading, file library, profile/settings inspection, or apply/save operation in the Calibrator.
+
+## Orientation support
+
+Capture currently requires Huion Kamvas 13 (Gen 3) with the Giano parser and Giano pen reports. This uses the user's previously recorded upright/cardinal observations: screen tip-to-eraser tangents are `(-tan(TiltX), tan(TiltY))`. Other models/parsers are diagnosed as unsupported for capture rather than inheriting guessed signs. Out-of-range, proximity-loss, eraser, nonfinite, and unpaired pen reports reject an active attempt.
+
+The source trace remains the OTD 0.6.7 Giano parser/report and the configured tablet identifiers. Signed angular conversion requires finite axes strictly between -90 and 90 degrees. Tests establish the mathematical projection and sign handling; physical angle scale, diagonals, attainable tilt range, capture defaults, and measured pointer accuracy still require device review. The filter continues to evaluate raw measured tilt independently of guidance conversion.
+
+## Verification
+
+- Debug and Release builds passed with zero warnings/errors; **133 non-live tests passed in each configuration**, including the original math/acquisition/filter package suite and 29 new capture cases. Release results are in `tests/CalibrationSuite.Tests/TestResults/milestone4-release.trx` (ignored build evidence).
+- New cases cover report eligibility, stale/pre-trigger data, repeated events, pressure independence, both duration/sample minima, gap/total timeouts and boundaries, circular pose gates, even medians, per-axis millimeter conversion, percentile boundaries, raw tilt stability, recapture preservation, invalid hull recovery, candidate/working transitions, copy payloads, pending-session state, and a complete synthetic tilt capture loaded by the runtime evaluator.
+- Offscreen WPF renders of the main screen, candidate review table, and capture screen at 1280×720 and 800×450 were inspected using a temporary harness under `artifacts/ui-smoke`. The actual review Accept button transferred a candidate into working data; acceptance was disabled when reviewing the already accepted result. These checks do not establish native full-screen placement, input responsiveness during actual pen contact, or physical device behavior.
+- The Release build generated its plugin ZIP and the existing package activation tests passed. Diff/whitespace checks passed.
+
+No new packages or schema versions were added. No plugin installation, OTD settings changes, or physical calibration were performed during implementation. All automated measurements are synthetic.
+
+## User review
+
+1. Build Release and launch the Calibrator. Move it to the tablet screen. Confirm the detected Huion is ready and the default count is 153. Set rows/columns to 2 and either pose count to 0; expect four upright captures. Verify invalid settings show an explanation and disable Calibrate.
+2. In full screen, inspect upright, left, right, up, and down readings against the documented signs. Check known physical angles and diagonal lean with an independent angle reference. If the displayed angle scale is wrong, stop and report the readings before trusting pose guidance. No physical accuracy is implied by the automated tests.
+3. Aim with the nib and press Space. Hold through the burst; test hover/zero-pressure capture, a pose failure, movement rejection, and a report gap. Retry successfully. Lift the pen between attempts; progress should remain. Hold Space down to verify no repeated captures. Check keyboard responsiveness during contact and verify pen/mouse/touch gestures do not activate the UI.
+4. Test Backspace across a target boundary and R. Use Esc, review the unfinished data, and Resume Capture. Test disconnect and display/DPI-change cancellation; ensure resume acquires fresh geometry and that changed tablet geometry requires a new calibration. If debug cleanup is unconfirmed, restart OTD and Calibrator before retrying.
+5. Finish a small calibration. Inspect the candidate, recapture one pose and one node, and Accept Calibration. Start another capture and discard it; the accepted result should remain. Recapture the accepted result, cancel/discard the draft, and verify the original remains available for Copy. Accept a new candidate and verify only then that it replaces the prior accepted result.
+6. Copy Calibration, paste into the intended OTD profile's Calibration data field, and Save. Verify actual pointer behavior with correction enabled and bypassed, including positions/tilts between measured values. Use only your physical measurements. Restore other filters as appropriate. Test the app's close reminder both before and after Copy.
+7. Once the small layout works, restore full tilt settings and check the requested traversal, reachable poses, per-node geometry acceptance, and defaults on your device. Record any needed parameter adjustments and untested monitor configurations.
+
+Final install/update/removal, settings/preset backup round-trips, redistribution notices, and requirement-level delivery audit remain milestone 5.

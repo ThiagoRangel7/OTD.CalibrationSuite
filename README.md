@@ -1,6 +1,6 @@
 # Calibration Suite
 
-A Windows calibrator for **display tablets**, using raw pen position and tilt from OTD 0.6.7. The app provides a full-screen target/readings preview. The OTD filter applies the shared measured correction evaluator; capture, review, and copying arrive in milestone 4.
+A Windows calibrator for **display tablets**, using raw pen position and tilt from OTD 0.6.7. The app guides full-screen measurement capture, reviews and recaptures measurements, and copies accepted calibration into OTD. The OTD filter applies the shared measured correction evaluator.
 
 This project has not been released. Earlier designs are iterations toward the first release, not supported data versions. Calibration data follows only the current structure, with no version tags, migrations, or backward-compatibility code. Development changes may require new calibration data.
 
@@ -12,13 +12,26 @@ Start OTD with only the tablet being calibrated connected. From this repository:
 dotnet run --project src/CalibrationSuite.Calibrator -c Release --no-build --no-restore
 ~~~
 
-The app connects automatically. Move its normal window onto the tablet's screen and press **Start preview**. The preview fills the monitor containing most of the window, including the taskbar area. No Connect button or tablet/display selector is needed.
+The app connects automatically. Move its normal window onto the tablet screen, choose capture settings, and press **Calibrate**. The default is 3 × 3 targets with 17 poses each (153 captures). Set **Azimuth directions** or **Non-upright altitude levels** to 0 for upright-only calibration. A small 2 × 2 upright-only layout is useful for the first workflow check. Settings live only in this app session; invalid settings are explained rather than adjusted silently.
 
-Use **← / →** for the nine targets, **R** for the first target, and **Esc** to return. Lift the pen whenever needed: after 500 ms without reports the live values clear and the preview shows **Waiting for pen**, without resetting the target. Actual disconnects, display/DPI changes, queue overflow, or blocked processing stop acquisition. Start again to acquire fresh device/display geometry.
+Capture currently supports the **Huion Kamvas 13 (Gen 3)** with OTD's Giano parser, using the cardinal directions you verified. Known physical angle scale, diagonal conversion, and reachable poses still need the [milestone 4 device review](docs/MILESTONE4.md). Other tablet/parser combinations are unavailable for capture until their orientation semantics are verified. This limit applies to capture guidance, not the filter's raw-tilt interpolation.
 
-Supported setup: the full active digitizer covers the full screen, with X pointing right and Y down. Rotated/cropped/misaligned configurations and non-display tablets are outside scope. You identify the tablet screen and aim with the physical tip. Disable other OTD filters to keep the cursor undistracting, then restore them afterward; raw acquisition precedes filters. The current OTD output mode and cursor mapping do not determine crosshair placement.
+Use the keyboard in the opaque full-screen window:
 
-Close OTD's tablet debugger before starting. Debug acquisition is daemon-global; concurrent debugger use is unsupported. Cleanup runs on exit/cancellation. If cleanup is unconfirmed, restart OTD and Calibrator before retrying. No OTD profile/settings are read or changed. Tilt is shown as parsed, without angle guidance until actual device semantics are verified.
+- **Space:** hold the physical nib on the crosshair in the requested pose and capture one burst. Every report must meet the angle tolerance; the burst must meet both duration and sample minima and the position/tilt stability limits. Pressure does not trigger capture.
+- **Backspace:** revisit the previous pose, including across targets.
+- **R:** restart the unfinished capture; during targeted recapture, restart only that selection.
+- **Esc:** cancel the active burst and return to the main screen. Completed measurements remain available through **Resume Capture** or **Review Calibration**.
+
+At each target, capture upright, then all altitude levels for the first azimuth, all levels for the next azimuth, and so on. Azimuth describes the eraser direction: 0° left, 90° down, 180° right, 270° up. Altitude is 90° upright. **Minimum altitude** 50° allows at most 40° of lean. Live readings use the latest report; stored measurements use burst medians.
+
+Lifting the pen between bursts preserves progress. A gap, pose failure, or excessive movement rejects only that attempt with a retry reason. Disconnects, geometry/DPI changes, overflow, or blocked processing end acquisition; resume with fresh geometry when ready. If debug cleanup is unconfirmed, restart OTD and Calibrator first. Close OTD's tablet debugger before capture; concurrent debugger use is unsupported.
+
+Completion opens **Review Calibration**. Inspect requested poses, measured positions/tilts, and raw errors. Select a row for **Recapture Pose** or **Recapture Node**, **Discard Unaccepted Data**, or **Accept Calibration**. Acceptance replaces only the in-memory working calibration. New captures, retries, and discards preserve accepted data until another candidate is accepted.
+
+**Copy Calibration** copies only accepted data. Paste it into the intended OTD profile's **Calibration data** field and **Save**. Copying does not apply or save anything in OTD. Closing the app loses its session measurements; the close reminder remains even after copying because the app cannot observe an OTD save. Use OTD presets/settings backups for durable versions.
+
+Supported setup: the full active digitizer covers the full screen, with X pointing right and Y down. Rotated/cropped/misaligned configurations and non-display tablets are outside scope. Aim with the physical nib. Disable other filters to keep the cursor undistracting, then restore them afterward; raw acquisition precedes filters. OTD cursor mapping does not determine crosshair placement. The Calibrator does not read or change profiles/settings.
 
 ## Build and debug through the editor
 
@@ -75,9 +88,9 @@ In OTD 0.6.7, open **Plugins → Plugin Manager**, choose **Install plugin...** 
 
 In the intended tablet profile's **Filters** tab, add **Calibration Suite** and keep exactly one enabled entry. It runs at **PreTransform** and must receive unchanged parsed position and tilt: position/tilt-changing filters must not precede it. Configure ordering in OTD; the Calibrator does not inspect it. Same-name tablets share an OTD profile, so confirm the destination tablet and pen yourself.
 
-For this milestone, review live behavior with **Calibration data** empty (identity). Verify its paste/Save/clear tooltip, enable/bypass, **Apply**, and **Save**. Save persists and applies; Apply alone does not prove a disk save. Clear the property and Save to reset; disable the checkbox to bypass while retaining data. Do not paste fictional measurements from the specification or tests onto real hardware. Actual measured correction can be checked after capture becomes available.
+For initial installation review, use **Calibration data** empty (identity). Verify its paste/Save/clear tooltip, enable/bypass, **Apply**, and **Save**. Save persists and applies; Apply alone does not prove a disk save. Clear the property and Save to reset; disable the checkbox to bypass while retaining data. Do not paste fictional measurements from the specification or tests onto real hardware. Then capture your own measurements and check actual correction as described in docs/MILESTONE4.md.
 
-After milestone 4, paste accepted Calibrator data into **Calibration data** and Save. OTD settings and presets retain this string; no separate calibration file is needed. Invalid data or geometry mismatch uses identity and reports the reason in OTD logs. Repeated unsupported pen input produces one warning per activation; missing tilt is never treated as upright, and eraser/out-of-proximity reports pass unchanged. See [milestone 3 review checks](docs/MILESTONE3.md).
+Paste accepted Calibrator data into **Calibration data** and Save. OTD settings and presets retain this string; no separate calibration file is needed. Invalid data or geometry mismatch uses identity and reports the reason in OTD logs. Repeated unsupported pen input produces one warning per activation; missing tilt is never treated as upright, and eraser/out-of-proximity reports pass unchanged. See [milestone 3 review checks](docs/MILESTONE3.md).
 
 An optional read-only installed-daemon check (no settings reads or debug enablement):
 
@@ -93,10 +106,10 @@ Run it under the same Windows user as OTD. See [milestone evidence and device ch
 
 Start with [milestone 2 examples and checks](docs/MILESTONE2.md). The core has no WPF or OTD dependency: `CalibrationData` handles calibration JSON, `CaptureSettings` resolves grid/poses, `NodeMesh` interpolates measured tilt errors, and `PreparedCalibration` combines four nodes to correct raw position. Loading invalid data returns identity with a diagnostic; no original JSON is rewritten. Preparing copies evaluator inputs so subsequent edits cannot affect a running snapshot.
 
-The core also supports upright-only calibration: zero azimuths or zero non-upright levels produces one pose per target. A single sample supplies a constant error at that target, blended across the screen using the same formula. Its UI controls arrive with capture in milestone 4.
+The core also supports upright-only calibration: zero azimuths or zero non-upright levels produces one pose per target. A single sample supplies a constant error at that target, blended across the screen using the same formula. The capture settings expose this option.
 
-The automated suite covers these mathematical and data rules using fictional measurements. It does not establish physical accuracy. The visible app remains a preview.
+The automated suite covers these mathematical and data rules using fictional measurements. It does not establish physical accuracy. Capture and review checks are described in docs/MILESTONE4.md.
 
-## Intended completed workflow
+## Calibration workflow
 
-Open → move to tablet screen → calibrate → review/accept → copy → paste into the intended OTD filter profile and Save. The Calibrator will retain measurements only during the current app session. It will not load prior OTD calibration, compare applied settings, or manage profiles. OTD owns durable storage and filter configuration.
+Open → move to tablet screen → calibrate → review/accept → copy → paste into the intended OTD filter profile and Save. The Calibrator retains measurements only during the current app session. It does not load prior OTD calibration, compare applied settings, or manage profiles. OTD owns durable storage and filter configuration.
