@@ -10,7 +10,7 @@ This infrastructure change precedes milestone 4. It does not change capture, cor
 - The filter uses OpenTabletDriver.Plugin 0.6.7 from NuGet with runtime assets excluded. The Calibrator continues to use source-built OTD Desktop and OTD report reconstruction.
 - Building the filter creates a configuration-specific ZIP. Debug includes its two matching PDBs; Release excludes them. Installation and daemon restart remain explicit user actions.
 - VS Code has build/test tasks, Calibrator launch, daemon attach, and a default .slnx selection. The Calibrator has a standard Visual Studio launch profile.
-- Calibrator outputs include OTD/NTS notices and dependency documentation. Full redistribution review remains milestone 5.
+- Calibrator outputs include OTD/NTS notices and dependency documentation. Full redistribution review remains milestone 6 (renumbered when the visual milestone was added).
 
 ## Evidence
 

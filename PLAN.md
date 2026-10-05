@@ -4,7 +4,7 @@
 
 `SPEC.md` guides product behavior; this plan records implementation order and progress. Prefer simpler approaches when they preserve important behavior, and update these documents when a better approach replaces an earlier design. The user's 2026-09-13 simplification request explicitly authorizes this judgment. Avoid speculative features, defensive layers, and tests that merely repeat implementation details.
 
-Milestones describe feature scope. The 2026-10-04 request "Implement milestone 4 cleanly" authorizes guided capture and review following the successful milestone 3 checks. Work autonomously within that scope. Delivery remains milestone 5.
+Milestones describe feature scope. The 2026-10-04 request "Implement milestone 4 cleanly" authorized guided capture and review following the successful milestone 3 checks. The subsequent request authorizes committing that implementation and documenting a new visual/UX milestone 5 before further implementation. Milestone 4 is checkpointed at `2ec8a32`; milestone 5 implementation has not started. Requirement audit and delivery move to milestone 6.
 
 Before work, inspect the working tree and recorded findings, and identify the relevant behavior and checks. Committed code, uncommitted changes, tests, and these documents are all open to improvement under the user's simplification request; none is a design constraint merely because it already exists.
 
@@ -82,7 +82,7 @@ Retain the full tilt interpolation approach following the 2026-09-13 discussion.
 - **Capture order implemented:** upright, then all altitude levels for azimuth 1, all levels for azimuth 2, and so on, before the next crosshair. Spec traversal, CreatePoses, and order tests now agree. This changes guidance order only, not mesh construction.
 - **Upright-only capture implemented:** zero non-upright altitude levels or zero azimuths generate only upright. A single measured sample supplies a constant node error through the existing spatial blend and current schema; multi-sample nodes keep their mesh checks. Tests cover loading, evaluation, invalid counts/data, and mixed nodes. Milestone 4 exposes the controls and enforces the upright pose gate.
 - **Confirmed burst acceptance:** retain the current spec: every eligible report must satisfy pose tolerance, followed by burst medians and position/tilt stability checks. Keep gap/duration/sample limits. The proposed median-only pose gate was declined.
-- **Presentation idea for later evaluation:** an arrow continuing from the pen tip toward a target point/sphere. Work out depth readability and explicitly reconcile its eraser-to-tip direction with the spec's tip-to-eraser azimuth convention. No 3D UI or rendering dependency is committed by this note.
+- **Presentation work scheduled in milestone 5:** an arrow continuing from the pen tip toward a target point/sphere. Work out depth readability and explicitly reconcile its eraser-to-tip direction with the spec's tip-to-eraser azimuth convention. Detailed scene design and rendering approach remain to be worked out in that milestone.
 
 Implement:
 
@@ -98,7 +98,27 @@ Implement:
 
 **Gate:** stop for review of capture usability and data preservation.
 
-## Milestone 5 — Requirement audit and delivery
+## Milestone 5 — Visual guidance and UI usability
+
+**Outcome:** readable setup and capture screens that make calibration easy to follow, with shorter instructions, clear visual hierarchy, and 3D arrow/target guidance.
+
+The user's milestone 4 review identified too much instructional text at the top of the setup window and too much text during full-screen capture. The clarification is explicit: retain relevant controls and options, and improve their presentation. Replacing them with a few presets or hiding them behind additional disclosure is not the requested solution. See [milestone 5 design brief](docs/MILESTONE5.md).
+
+Implement:
+
+- Shorten the setup introduction to a brief actionable instruction. Organize connection readiness, grid settings, pose settings, sampling/quality controls, capture count, and actions using clear headings, spacing, alignment, labels, and units. Keep relevant inputs visible and easy to find; compact layout and scrolling handle smaller windows. Preserve the existing configuration capabilities.
+- Make full-screen capture primarily visual: a prominent active crosshair, current versus requested orientation, distinct ready/capturing/accepted/retry cues, burst progress, overall progress, and compact keyboard hints. Use a short contextual message for failures and waiting. Keep required readings legible in a secondary region without obscuring the physical aiming point.
+- Develop the user's 3D arrow idea: the arrow continues from the pen tip toward a requested target point/sphere. Define the nib anchor, live direction, target direction, depth cues, and camera so upright, cardinal, and diagonal poses are unambiguous. Resolve the eraser-to-tip arrow versus tip-to-eraser azimuth convention explicitly. Visual direction must match the physical pen and the existing verified guidance/gates; raw stored tilt is unaffected.
+- Begin the visual work with a concrete layout/scene mockup or prototype. Use the existing WPF stack where practical; justify any new rendering dependency. Apply the hierarchy consistently to review/accept/copy feedback while preserving those actions and their data ownership.
+- Drive visuals from existing acquisition/capture state. Retain keyboard triggering, per-report gates, stability checks, traversal, input suppression, pen-absence handling, candidate/working separation, and the session-only/paste-and-Save workflow.
+
+**Automated/visual checks:** retain the milestone 4 regression suite. Add focused checks for any new orientation-to-visual mapping and state transitions; compare upright/cardinal/diagonal projections with independent expectations. Inspect rendered layouts at ordinary and small/high-DPI viewport sizes, checking target occlusion, labels, visible controls, contrast, and ready/accepted distinctions that do not rely on color alone. Verify visual updates leave acquisition and keyboard input responsive.
+
+**User checks:** locate and adjust every relevant setup option without navigating hidden controls; understand where to start from the brief instruction and hierarchy. Capture a small layout using the visual guide, then try full tilt directions and retry/waiting states. Confirm the arrow's direction and depth are intuitive, and that pen contact does not activate controls or stall the display. Revisit the outstanding milestone 4 data-preservation and hardware checks through the improved UI; record results rather than assuming that a visual redesign establishes accuracy.
+
+**Gate:** stop for review of readability, visual guidance, and calibration usability. Physical angle-scale, diagonal, and correction checks remain open until supported by device evidence.
+
+## Milestone 6 — Requirement audit and delivery
 
 **Outcome:** reproducible filter package and separately launched Calibrator satisfying the initial-release spec, with verified behavior and documented device limits.
 
@@ -121,13 +141,13 @@ Guided accuracy-testing sessions and their comparison reports, test-pose generat
 
 | Spec area | Primary milestones |
 | --- | --- |
-| 1: Components, automatic RPC, full-screen mapping, pipeline, initialization | 1, 3, 4, 5 |
-| 2: Measurements, settings, grid, orientation | 1, 2, 4 |
-| 3: Capture, review, UI | 4 |
-| 4: Interpolation and runtime | 2, 3 |
-| 5: Schema, persistence, application, status | 2, 3, 4, 5 |
-| 6: Required verification checks | 2–5 |
-| 7: OTD source verification | 1, 3, 5; revisit as needed |
+| 1: Components, automatic RPC, full-screen mapping, pipeline, initialization | 1, 3, 4, 5, 6 |
+| 2: Measurements, settings, grid, orientation | 1, 2, 4, 5, 6 |
+| 3: Capture, review, UI | 4, 5, 6 |
+| 4: Interpolation and runtime | 2, 3, 6 |
+| 5: Schema, persistence, application, status | 2, 3, 4, 5, 6 |
+| 6: Required verification checks | 2–6 |
+| 7: OTD source verification | 1, 3, 6; revisit as needed |
 
 ## Progress record
 
@@ -138,10 +158,11 @@ States: Not started → In progress → Awaiting user review → Approved. Revie
 | 1: Build, acquisition, mapping | Approved | Simplified workflow implemented; 25 synthetic tests and read-only device detection passed at that milestone. Basic physical checklist reported passing by the user on 2026-09-13; cardinal tilt signs recorded. Additional configurations and angle-scale/accuracy checks remain in docs/MILESTONE1.md. | User explicitly requested "Implement milestone 2" on 2026-09-13. Approval to advance is not device verification. |
 | 2: Data and correction core | Approved | Calibration data, layout, immutable measured meshes, and correction evaluator implemented. Locked restore, Release build, and 93 synthetic tests passed. See docs/MILESTONE2.md. | User requested "Implement the next milestone" on 2026-09-13, authorizing milestone 3. This is not physical-device verification. |
 | 3: Filter and package | Approved | Positioned correction filter, injected snapshot activation, bounded diagnostics, and standard ZIP package implemented. User reported build and live identity-data review checks passing on 2026-10-03; see docs/MILESTONE3.md. | User requested milestone 4 on 2026-10-04. Approval to advance is not measured-correction verification. |
-| 4: Capture and review | Awaiting user review | Guided capture, burst gates, review/recapture, candidate acceptance, and accepted-data copying implemented. Debug/Release builds and 133 non-live tests per configuration passed; offscreen WPF renders and acceptance checks passed. See docs/MILESTONE4.md. | Implementation authorized on 2026-10-04; physical review and acceptance pending. |
-| 5: Audit and delivery | Not started | — | — |
+| 4: Capture and review | Awaiting user review | Implementation checkpoint `2ec8a32`; Debug/Release builds and 133 non-live tests per configuration passed. User review found setup/capture text excessive and difficult to follow; visual rework is scheduled separately in milestone 5. See docs/MILESTONE4.md. | User authorized the checkpoint commit on 2026-10-04. This is not physical verification or final usability acceptance. |
+| 5: Visual guidance and UI usability | Not started | Scope documented in docs/MILESTONE5.md: shorter instructions, improved hierarchy, visible relevant controls, and 3D arrow/target guidance. | Planning requested on 2026-10-04; implementation not yet requested. |
+| 6: Audit and delivery | Not started | Renumbered from the former milestone 5; delivery scope retained. | — |
 
-Current stop: milestone 4 user review. Implementation and automated checks are complete. The next user review covers capture usability, data preservation, known-angle guidance, and real measured correction. Milestone 5 has not started.
+Current stop: milestone 4 implementation is committed; milestone 5 visual work is planned and has not started. The user requested a checkpoint and documentation before further implementation. Milestone 4 hardware/data-preservation checks remain pending and will be revisited through the improved UI. Final audit and delivery are milestone 6.
 
 2026-09-13 simplification review:
 
@@ -164,4 +185,6 @@ Current stop: milestone 4 user review. Implementation and automated checks are c
 
 2026-10-03 user review: build/editor checks, Release ZIP installation, filter/property presentation, empty-data enable/bypass, Apply/Save, persistence after OTD restart, and Console inspection all reported passing. Recorded as user-verified, without claiming measured correction accuracy or interactive breakpoint verification. Existing staged infrastructure changes are preserved; milestone 4 remains not started.
 
-2026-10-04 milestone 4: implemented capture settings/traversal, serialized per-report burst gates and medians/stability, keyboard capture/recovery, current-session review and targeted recapture, accepted-data copying, and close reminders. Guidance is limited to the Huion/Giano semantics already recorded; physical angular scale, diagonals, and correction accuracy remain review checks. Both builds and 133 non-live tests per configuration passed, together with offscreen WPF layout/acceptance checks. See docs/MILESTONE4.md. Changes are not committed.
+2026-10-04 milestone 4: implemented capture settings/traversal, serialized per-report burst gates and medians/stability, keyboard capture/recovery, current-session review and targeted recapture, accepted-data copying, and close reminders. Guidance is limited to the Huion/Giano semantics already recorded; physical angular scale, diagonals, and correction accuracy remain review checks. Both builds and 133 non-live tests per configuration passed, together with offscreen WPF layout/acceptance checks. See docs/MILESTONE4.md. Subsequently committed as `2ec8a32` at the user's request.
+
+2026-10-04 visual review follow-up: the user found the setup instructions and full-screen text too dense to follow. They clarified that relevant controls/options should stay visible; the requested improvement is shorter instructions, better readability, layout, and visual hierarchy. The 3D arrow continuing from the tip toward a target point/sphere is the preferred guidance concept. Committed the current implementation before updating these documents. Added milestone 5 for visual/UX work and moved final audit/delivery to milestone 6. No new UI implementation or hardware verification is claimed by this planning update.

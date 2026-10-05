@@ -169,6 +169,14 @@ Show Resume Capture for an unfinished session; its settings remain those capture
 
 Use OTD for reset, enable/disable, backup/restore, and presets. Add no Calibrator Import/Export, Reset Working Calibration, or Apply/Save actions. Runtime filter loading still validates persisted calibration through the shared core.
 
+### Visual UX target — milestone 5 (planned)
+
+The milestone 4 user review identified excessive setup instructions and full-screen text. Shorten instructions and improve readability through typography, spacing, grouping, alignment, and action/status hierarchy. Preserve relevant configuration options and keep their controls visible and discoverable in the setup layout, including sampling/quality settings. Use responsive layout and scrolling where needed; do not treat hiding inputs or replacing them with a few presets as the requested simplification.
+
+Make full-screen guidance primarily visual while preserving a clear physical aiming point, required live readings, keyboard actions, and capture feedback. The preferred concept is an arrow continuing from the pen tip toward a target point/sphere. Work out its live/requested orientation, nib anchor, depth cues, and camera in a concrete visual prototype. An arrow continuing beyond the nib follows eraser-to-tip, opposite the tip-to-eraser convention used for azimuth: resolve this explicitly in the visualization while retaining the existing verified angle gates and unchanged stored raw tilt.
+
+Distinguish ready, capturing, accepted, waiting, and retry states with visual cues beyond color alone, compact progress, and short contextual text. Keep essential readings legible in a secondary region and avoid target occlusion. The visual update consumes the existing capture state; measurement acceptance, data ownership, and OTD integration retain their established contracts. See [milestone 5 design brief](docs/MILESTONE5.md) for scope and review criteria. This section describes planned presentation work, not the current implemented UI.
+
 ## 4. Interpolation and runtime
 
 ### Interpolation decision

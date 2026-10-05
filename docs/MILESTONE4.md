@@ -2,6 +2,8 @@
 
 Implemented following the 2026-10-04 request to implement milestone 4. Automated verification is complete; awaiting user review and acceptance. Physical review remains pending.
 
+Checkpointed at the user's request as `2ec8a32` (`feat: implement guided calibration capture and review`). The user found the setup instructions and full-screen text too dense to follow and requested shorter instructions, stronger visual hierarchy, and visual orientation guidance while keeping relevant controls visible. That work is planned as [milestone 5](MILESTONE5.md). The checkpoint does not claim usability acceptance or completion of the physical checks below.
+
 ## Behavior
 
 - Main actions are Calibrate, Review Calibration, and Copy Calibration, with Resume Capture when interrupted measurements exist. Basic and advanced controls expose all specified capture settings and a total-count preview. Either zero pose count gives upright-only capture. Session layouts are capped at 10,000 measurements to reject excessive allocations before starting.
@@ -31,7 +33,7 @@ No new packages or schema versions were added. No plugin installation, OTD setti
 
 ## User review
 
-1. Build Release and launch the Calibrator. Move it to the tablet screen. Confirm the detected Huion is ready and the default count is 153. Set rows/columns to 2 and either pose count to 0; expect four upright captures. Verify invalid settings show an explanation and disable Calibrate.
+1. Build Release and launch the Calibrator with **Debug → Start Without Debugging (Ctrl+F5)** in Visual Studio. Move it to the tablet screen. Confirm the detected Huion is ready and the default count is 153. Set rows/columns to 2 and either pose count to 0; expect four upright captures. Verify invalid settings show an explanation and disable Calibrate.
 2. In full screen, inspect upright, left, right, up, and down readings against the documented signs. Check known physical angles and diagonal lean with an independent angle reference. If the displayed angle scale is wrong, stop and report the readings before trusting pose guidance. No physical accuracy is implied by the automated tests.
 3. Aim with the nib and press Space. Hold through the burst; test hover/zero-pressure capture, a pose failure, movement rejection, and a report gap. Retry successfully. Lift the pen between attempts; progress should remain. Hold Space down to verify no repeated captures. Check keyboard responsiveness during contact and verify pen/mouse/touch gestures do not activate the UI.
 4. Test Backspace across a target boundary and R. Use Esc, review the unfinished data, and Resume Capture. Test disconnect and display/DPI-change cancellation; ensure resume acquires fresh geometry and that changed tablet geometry requires a new calibration. If debug cleanup is unconfirmed, restart OTD and Calibrator before retrying.
@@ -39,4 +41,4 @@ No new packages or schema versions were added. No plugin installation, OTD setti
 6. Copy Calibration, paste into the intended OTD profile's Calibration data field, and Save. Verify actual pointer behavior with correction enabled and bypassed, including positions/tilts between measured values. Use only your physical measurements. Restore other filters as appropriate. Test the app's close reminder both before and after Copy.
 7. Once the small layout works, restore full tilt settings and check the requested traversal, reachable poses, per-node geometry acceptance, and defaults on your device. Record any needed parameter adjustments and untested monitor configurations.
 
-Final install/update/removal, settings/preset backup round-trips, redistribution notices, and requirement-level delivery audit remain milestone 5.
+The next implementation milestone is **milestone 5: visual guidance and UI usability**. Final install/update/removal, settings/preset backup round-trips, redistribution notices, and requirement-level delivery audit move to **milestone 6**. Pending physical/data-preservation checks above remain open through that sequence.

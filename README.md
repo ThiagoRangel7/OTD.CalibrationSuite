@@ -4,6 +4,8 @@ A Windows calibrator for **display tablets**, using raw pen position and tilt fr
 
 This project has not been released. Earlier designs are iterations toward the first release, not supported data versions. Calibration data follows only the current structure, with no version tags, migrations, or backward-compatibility code. Development changes may require new calibration data.
 
+Milestone 4 capture/review is checkpointed at `2ec8a32`; physical review remains pending. The next planned work is [milestone 5: visual guidance and UI usability](docs/MILESTONE5.md), with shorter instructions, clearer hierarchy, visible relevant controls, and 3D arrow/target guidance. Final audit and delivery are milestone 6.
+
 ## Run
 
 Start OTD with only the tablet being calibrated connected. From this repository:
@@ -43,6 +45,8 @@ Use **Visual Studio 2026** with the **.NET desktop development** workload and th
 4. Select **Debug** in the toolbar. Start OTD normally, then click the green **Start** button to build and debug the Calibrator.
 5. Open **Test → Test Explorer** and choose **Run All Tests**. The live-daemon test is opt-in; other tests use synthetic data.
 
+For a normal **Release** usability review, build Release and choose **Debug → Start Without Debugging** (**Ctrl+F5**). This launches the app without attaching a debugger to the optimized build.
+
 A breakpoint is a red dot added by clicking beside a line number. The debugger pauses there so you can inspect variables. Pausing acquisition can activate its intentional stall/time limits.
 
 **VS Code:** open this repository folder and install the recommended **C# Dev Kit** extension. The workspace selects CalibrationSuite.slnx. Choose **Terminal → Run Build Task → Build Debug**, or **Run and Debug → Calibrator → Start Debugging**. **Terminal → Run Task** also offers **Build Release** and **Test**. The configured tasks perform the same builds as Visual Studio.
@@ -70,7 +74,7 @@ dotnet test tests/CalibrationSuite.Tests/CalibrationSuite.Tests.csproj -c Debug 
 dotnet build CalibrationSuite.slnx -c Release
 ~~~
 
-Keep the Calibrator's complete **src/CalibrationSuite.Calibrator/bin/Release/net8.0-windows** folder together, including DLLs and notices. The user needs a running compatible OTD 0.6.7 daemon, but never source code or build tools. Runtime dependency redistribution review remains part of milestone 5; this is a development output, not a published release.
+Keep the Calibrator's complete **src/CalibrationSuite.Calibrator/bin/Release/net8.0-windows** folder together, including DLLs and notices. The user needs a running compatible OTD 0.6.7 daemon, but never source code or build tools. Runtime dependency redistribution review remains part of milestone 6; this is a development output, not a published release.
 
 The source revision and archive checksum are in **dependencies/otd/source.json**. OTD project definitions and package locks are committed there so editors can load all ten projects before the source download. Source files are unmodified and cached under **artifacts/otd-source**; NuGet packages are under **artifacts/packages**. The filter uses the official OTD Plugin package. See [dependency maintenance](docs/DEPENDENCIES.md) and [build workflow verification](docs/BUILD-WORKFLOW.md).
 

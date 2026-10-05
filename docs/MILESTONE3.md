@@ -1,6 +1,6 @@
 # Milestone 3 — filter and package review
 
-Implemented on 2026-09-13 following the user's request to implement the next milestone. The user reported the build and live identity-data review checks passing on 2026-10-03. Milestone 4 has not started.
+Implemented on 2026-09-13 following the user's request to implement the next milestone. The user reported the build and live identity-data review checks passing on 2026-10-03. Milestone 4 was subsequently implemented and checkpointed; see [capture review](MILESTONE4.md) and the planned [milestone 5 visual work](MILESTONE5.md).
 
 ## Implementation
 
