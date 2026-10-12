@@ -1,8 +1,8 @@
 # Milestone 4 — guided capture and review
 
-Implemented following the 2026-10-04 request to implement milestone 4. Automated verification is complete; awaiting user review and acceptance. Physical review remains pending.
+Implemented following the 2026-10-04 request to implement milestone 4. Automated verification is complete; the user subsequently requested milestone 5, authorizing advancement. Physical review and usability acceptance remain pending.
 
-Checkpointed at the user's request as `2ec8a32` (`feat: implement guided calibration capture and review`). The user found the setup instructions and full-screen text too dense to follow and requested shorter instructions, stronger visual hierarchy, and visual orientation guidance while keeping relevant controls visible. That work is planned as [milestone 5](MILESTONE5.md). The checkpoint does not claim usability acceptance or completion of the physical checks below.
+Checkpointed at the user's request as `2ec8a32` (`feat: implement guided calibration capture and review`). The user found the setup instructions and full-screen text too dense to follow and requested shorter instructions, stronger visual hierarchy, and visual orientation guidance while keeping relevant controls visible. That work is implemented in [milestone 5](MILESTONE5.md). The checkpoint does not claim usability acceptance or completion of the physical checks below.
 
 ## Behavior
 
@@ -41,4 +41,4 @@ No new packages or schema versions were added. No plugin installation, OTD setti
 6. Copy Calibration, paste into the intended OTD profile's Calibration data field, and Save. Verify actual pointer behavior with correction enabled and bypassed, including positions/tilts between measured values. Use only your physical measurements. Restore other filters as appropriate. Test the app's close reminder both before and after Copy.
 7. Once the small layout works, restore full tilt settings and check the requested traversal, reachable poses, per-node geometry acceptance, and defaults on your device. Record any needed parameter adjustments and untested monitor configurations.
 
-The next implementation milestone is **milestone 5: visual guidance and UI usability**. Final install/update/removal, settings/preset backup round-trips, redistribution notices, and requirement-level delivery audit move to **milestone 6**. Pending physical/data-preservation checks above remain open through that sequence.
+The visual rework is implemented in **milestone 5: visual guidance and UI usability**. Final install/update/removal, settings/preset backup round-trips, redistribution notices, and requirement-level delivery audit remain **milestone 6**. Pending physical/data-preservation checks above remain open through that sequence.

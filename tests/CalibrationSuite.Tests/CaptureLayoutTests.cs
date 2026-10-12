@@ -45,7 +45,7 @@ public class CaptureLayoutTests
             defaults with { MinAltitudeDeg = 0 }, defaults with { AngleToleranceDeg = 10 },
             defaults with { AzimuthCount = 60 }, defaults with { NonUprightAltitudeCount = 7 },
             defaults with { GridInsetMm = 50 }, defaults with { GridInsetMm = double.NaN },
-            defaults with { CaptureWindowMs = 0 }, defaults with { CaptureTimeoutMs = 250 },
+            defaults with { CaptureWindowMs = 0 }, defaults with { CaptureTimeoutMs = defaults.CaptureWindowMs },
             defaults with { MinSamplesPerCapture = 0 }, defaults with { ReportGapTimeoutMs = 0 },
             defaults with { PositionStabilityMm = 0 }, defaults with { TiltStabilityDeg = double.PositiveInfinity }
         ];

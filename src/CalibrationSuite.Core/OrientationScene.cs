@@ -1,0 +1,72 @@
+namespace CalibrationSuite.Core;
+
+// Visual coordinates are X right and Y down the display. The top view reverses
+// the existing tip-to-eraser convention so the arrow continues through the nib.
+public static class OrientationScene
+{
+    public static Point2 ArrowTip(RequestedPose pose) => PointAt(Radius(pose.AltitudeDeg), pose.AzimuthDeg ?? 0);
+
+    public static Point2 PointAt(double radius, double azimuthDeg)
+    {
+        double azimuth = azimuthDeg * Math.PI / 180;
+        return new(radius * Math.Cos(azimuth), -radius * Math.Sin(azimuth));
+    }
+
+    public static OrientationTarget TargetSpace(RequestedPose requested, double toleranceDeg) => new(
+        Radius(Math.Min(90, requested.AltitudeDeg + toleranceDeg)),
+        Radius(Math.Max(0, requested.AltitudeDeg - toleranceDeg)),
+        requested.AzimuthDeg, toleranceDeg);
+
+    private static double Radius(double altitudeDeg) => altitudeDeg >= 90 ? 0 : Math.Cos(altitudeDeg * Math.PI / 180);
+}
+
+// These are the exact altitude and circular-azimuth gate bounds projected into
+// the top view, rather than an enlarged decorative circle around an ideal pose.
+public readonly record struct OrientationTarget(double InnerRadius, double OuterRadius, double? AzimuthDeg, double ToleranceDeg);
+
+public readonly record struct OverlayPosition(double Left, double Top);
+
+public readonly record struct OverlayBounds(double Left, double Top, double Width, double Height)
+{
+    public double DistanceTo(Point2 point)
+    {
+        double dx = Math.Max(Math.Max(Left - point.X, point.X - Left - Width), 0);
+        double dy = Math.Max(Math.Max(Top - point.Y, point.Y - Top - Height), 0);
+        return Math.Sqrt(dx * dx + dy * dy);
+    }
+
+    public bool Overlaps(OverlayBounds other, double gap) =>
+        Left < other.Left + other.Width + gap && Left + Width + gap > other.Left
+        && Top < other.Top + other.Height + gap && Top + Height + gap > other.Top;
+}
+
+public static class CaptureOverlay
+{
+    public const double MaxGuidanceRadius = 200;
+
+    // Compact information cards leave room for the guide around a central nib.
+    public static double Width(double viewportWidth, double margin) =>
+        Math.Min(320, Math.Max(0, viewportWidth / 2 - margin - 80));
+
+    public static OverlayPosition Place(double width, double height, Point2 target, double panelWidth, double panelHeight, double margin) =>
+        Corners(width, height, panelWidth, panelHeight, margin)
+            .MaxBy(p => new OverlayBounds(p.Left, p.Top, panelWidth, panelHeight).DistanceTo(target));
+
+    public static OverlayPosition PlaceSecondary(double width, double height, Point2 target, OverlayBounds primary,
+        double panelWidth, double panelHeight, double margin) =>
+        Corners(width, height, panelWidth, panelHeight, margin)
+            .Where(p => !new OverlayBounds(p.Left, p.Top, panelWidth, panelHeight).Overlaps(primary, 8))
+            .MaxBy(p => new OverlayBounds(p.Left, p.Top, panelWidth, panelHeight).DistanceTo(target));
+
+    // The guide stays anchored to the raw target. Only its scale changes to fit
+    // the display and both cards; neither the target region nor its tolerance is inflated.
+    public static double GuidanceRadius(double width, double height, Point2 target, OverlayBounds primary, OverlayBounds secondary) =>
+        Math.Max(0, new[] { MaxGuidanceRadius, target.X - 5, width - target.X - 5, target.Y - 5, height - target.Y - 5,
+            primary.DistanceTo(target) - 12, secondary.DistanceTo(target) - 12 }.Min());
+
+    private static OverlayPosition[] Corners(double width, double height, double panelWidth, double panelHeight, double margin)
+    {
+        double right = Math.Max(margin, width - panelWidth - margin), bottom = Math.Max(margin, height - panelHeight - margin);
+        return [new(margin, margin), new(right, margin), new(margin, bottom), new(right, bottom)];
+    }
+}

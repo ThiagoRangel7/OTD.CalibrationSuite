@@ -10,8 +10,9 @@ public sealed class ReviewWindow : Window
     private readonly CalibrationWorkspace workspace;
     private readonly ComboBox source = new() { Margin = new(0, 8, 0, 8), MinWidth = 200 };
     private readonly DataGrid table = new() { IsReadOnly = true, AutoGenerateColumns = false, CanUserAddRows = false,
-        SelectionMode = DataGridSelectionMode.Single, SelectionUnit = DataGridSelectionUnit.FullRow, MinHeight = 150 };
-    private readonly TextBlock description = new() { TextWrapping = TextWrapping.Wrap, Margin = new(0, 8, 0, 12) };
+        SelectionMode = DataGridSelectionMode.Single, SelectionUnit = DataGridSelectionUnit.FullRow };
+    private readonly TextBlock description = Ui.Text();
+    private readonly TextBlock summary = Ui.Heading("");
     private readonly Button accept = new() { Content = "Accept Calibration" };
     private readonly Button pose = new() { Content = "Recapture Pose" };
     private readonly Button node = new() { Content = "Recapture Node" };
@@ -24,16 +25,27 @@ public sealed class ReviewWindow : Window
     public ReviewWindow(CalibrationWorkspace workspace)
     {
         this.workspace = workspace;
-        Title = "Review Calibration"; Width = Math.Min(1080, SystemParameters.WorkArea.Width); Height = Math.Min(660, SystemParameters.WorkArea.Height); MinWidth = 650; MinHeight = 360;
+        SetResourceReference(StyleProperty, typeof(Window));
+        Title = "Review Calibration"; Width = Math.Min(1080, SystemParameters.WorkArea.Width); Height = Math.Min(700, SystemParameters.WorkArea.Height); MinWidth = 560; MinHeight = 400;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        var layout = new DockPanel { Margin = new(20) };
-        var top = new StackPanel(); top.Children.Add(source); top.Children.Add(description);
+        var layout = new DockPanel { Margin = new(24), Background = Ui.Brush("#F5F7FB") };
+        var top = new StackPanel(); top.Children.Add(Ui.Heading("Review calibration", 24));
+        source.Margin = new(0, 6, 0, 6); top.Children.Add(source);
+        summary.FontSize = 14; summary.Margin = new(0, 0, 0, 2); top.Children.Add(summary);
+        description.FontSize = 12; description.Foreground = Ui.Muted; description.Margin = new(0, 0, 0, 8); top.Children.Add(description);
         DockPanel.SetDock(top, Dock.Top); layout.Children.Add(top);
-        var buttons = new WrapPanel { Margin = new(0, 12, 0, 0) };
+        var footer = new StackPanel { Margin = new(0, 10, 0, 0) };
+        var buttons = new WrapPanel();
         var close = new Button { Content = "Close" };
         foreach (var button in new[] { accept, pose, node, discard, close })
-        { button.Margin = new(0, 0, 8, 4); button.Padding = new(10, 6, 10, 6); buttons.Children.Add(button); }
-        DockPanel.SetDock(buttons, Dock.Bottom); layout.Children.Add(buttons); layout.Children.Add(table); Content = layout;
+        { button.FontSize = 13; button.Padding = new(12, 7, 12, 7); button.Margin = new(0, 0, 8, 6); buttons.Children.Add(button); }
+        Ui.Primary(accept); footer.Children.Add(buttons);
+        footer.Children.Add(Ui.Text("Session data → Copy on the main screen → paste in OTD → Save.", 12, Ui.Muted));
+        DockPanel.SetDock(footer, Dock.Bottom); layout.Children.Add(footer);
+        table.FontSize = 13; table.RowHeight = 34; table.GridLinesVisibility = DataGridGridLinesVisibility.Horizontal;
+        table.HorizontalGridLinesBrush = Ui.Brush("#E3E9F1"); table.BorderBrush = Ui.Brush("#B9C6D6");
+        table.AlternatingRowBackground = Ui.Brush("#F2F5FA");
+        layout.Children.Add(table); Content = layout;
         foreach (var (header, property) in new[] { ("Node / pose", "Address"), ("Requested pose", "Requested"),
             ("Target (raw)", "Target"), ("Measured position", "Position"), ("Measured tilt", "Tilt"), ("Error (raw)", "Error") })
             table.Columns.Add(new DataGridTextColumn { Header = header, Binding = new Binding(property), Width = DataGridLength.Auto });
@@ -41,6 +53,11 @@ public sealed class ReviewWindow : Window
         if (workspace.Candidate != null) source.Items.Add(new ComboBoxItem { Content = "Candidate — awaiting acceptance", Tag = workspace.Candidate });
         if (workspace.Working != null) source.Items.Add(new ComboBoxItem { Content = "Accepted calibration — session only", Tag = workspace.Working });
         source.SelectionChanged += (_, _) => Refresh(); source.SelectedIndex = 0;
+        table.SelectionChanged += (_, _) =>
+        {
+            bool recapturable = Selected != null && (ReferenceEquals(Selected, workspace.Candidate) || ReferenceEquals(Selected, workspace.Working));
+            pose.IsEnabled = node.IsEnabled = recapturable && table.SelectedItem != null;
+        };
         accept.Click += (_, _) => { workspace.Accept(); Close(); };
         discard.Click += (_, _) => { workspace.Discard(); Close(); };
         pose.Click += (_, _) => Recapture(false); node.Click += (_, _) => Recapture(true);
@@ -63,10 +80,11 @@ public sealed class ReviewWindow : Window
         accept.IsEnabled = isCandidate && workspace.Session == null;
         pose.IsEnabled = node.IsEnabled = isCandidate || isWorking;
         discard.IsEnabled = !isWorking;
-        description.Text = $"{data.CapturedCount}/{data.Total} measurements. " + (isWorking
-            ? "Accepted in this app session. Use Copy Calibration on the main screen, then paste and Save in OTD."
-            : isCandidate ? "Accept enables copying and replaces accepted data in memory. It does not apply or save anything in OTD."
-            : "Resume from the main screen. Backspace revisits previous poses; the accepted calibration is preserved.");
+        summary.Text = $"{data.CapturedCount} / {data.Total} measurements · " + (isWorking ? "✓ Accepted" : isCandidate ? "○ Candidate" : "… Unfinished");
+        description.Text = isWorking ? "Ready to copy from the main screen. Select a row to recapture."
+            : isCandidate ? workspace.Session == null ? "Accept replaces accepted data in this session. Select a row to recapture."
+                : "Finish or discard the unfinished capture before accepting this candidate."
+            : "Resume from the main screen. Accepted data is preserved.";
         static string Pair(Point2 p) => $"({p.X:F1}; {p.Y:F1})";
         table.ItemsSource = Enumerable.Range(0, data.Total).Select(i =>
         {

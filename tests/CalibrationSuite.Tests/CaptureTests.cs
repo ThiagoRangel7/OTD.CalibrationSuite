@@ -12,7 +12,8 @@ public class CaptureTests
 {
     private static readonly SourceGeometry Geometry = new(20000, 10000, 200, 200);
     private static readonly CaptureSettings Settings = new() { RowCount = 2, ColumnCount = 2, AzimuthCount = 0,
-        CaptureWindowMs = 10, MinSamplesPerCapture = 2, CaptureTimeoutMs = 100, ReportGapTimeoutMs = 40 };
+        CaptureWindowMs = 10, MinSamplesPerCapture = 2, CaptureTimeoutMs = 100, ReportGapTimeoutMs = 40,
+        AngleToleranceDeg = 3, PositionStabilityMm = 0.25, TiltStabilityDeg = 2 };
     private static RequestedPose Orientation(Point2 tilt) => CaptureDevice.Orientation(tilt, 3);
     private static CaptureBurst Burst(CaptureSettings? settings = null) => new(settings ?? Settings, Geometry, Orientation);
 

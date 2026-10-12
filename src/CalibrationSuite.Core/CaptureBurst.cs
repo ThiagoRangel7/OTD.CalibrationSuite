@@ -1,35 +1,41 @@
 namespace CalibrationSuite.Core;
 
+public enum CaptureBurstStatus { Idle, Capturing, Accepted, Retry }
+
 // Driven by monotonic ingress times, in milliseconds. The caller serializes commands/reports.
 public sealed class CaptureBurst(CaptureSettings settings, SourceGeometry geometry, Func<Point2, RequestedPose> orientation)
 {
     private readonly List<(Point2 Position, Point2 Tilt)> samples = [];
     private RequestedPose requested = new(90);
     private double started, first, last;
-    public bool Active { get; private set; }
+    public CaptureBurstStatus Status { get; private set; }
+    public bool Active => Status == CaptureBurstStatus.Capturing;
     public int Count => samples.Count;
+    public double DurationMs => samples.Count == 0 ? 0 : Math.Max(0, last - first);
+    public double Progress => Math.Min(1, Math.Min((double)Count / settings.MinSamplesPerCapture, DurationMs / settings.CaptureWindowMs));
     public string Message { get; private set; } = "Aim with the physical nib, hold the requested pose, then press Space.";
 
     public bool Start(RequestedPose pose, double now)
     {
         if (Active) return false;
-        requested = pose; started = first = last = now; samples.Clear(); Active = true;
+        requested = pose; started = first = last = now; samples.Clear(); Status = CaptureBurstStatus.Capturing;
         Message = "Capturing — hold still.";
         return true;
     }
 
-    public void Cancel(string message) { Active = false; samples.Clear(); Message = message; }
+    public void Cancel(string message, bool retry = false)
+    { Status = retry ? CaptureBurstStatus.Retry : CaptureBurstStatus.Idle; samples.Clear(); Message = message; }
 
     public void Reject(double time, string message)
     {
-        if (Active && time >= started) Cancel(message + " — press Space to retry.");
+        if (Active && time >= started) Cancel(message + " — press Space to retry.", retry: true);
     }
 
     public void CheckTimeout(double now)
     {
         if (!Active) return;
-        if (now - last > settings.ReportGapTimeoutMs) Cancel("Report gap — return the pen and press Space to retry.");
-        else if (now - started > settings.CaptureTimeoutMs) Cancel("Capture timed out before duration and sample minima were met. Press Space to retry.");
+        if (now - last > settings.ReportGapTimeoutMs) Cancel("Report gap — return the pen and press Space to retry.", retry: true);
+        else if (now - started > settings.CaptureTimeoutMs) Cancel("Capture timed out before duration and sample minima were met. Press Space to retry.", retry: true);
     }
 
     public CalibrationSample? Add(double time, Point2 position, Point2 tilt)
@@ -37,12 +43,12 @@ public sealed class CaptureBurst(CaptureSettings settings, SourceGeometry geomet
         if (!Active || time < started) return null; // Reports queued before the key press cannot enter the burst.
         CheckTimeout(time);
         if (!Active) return null;
-        if (!position.IsFinite || !tilt.IsFinite) { Cancel("Nonfinite pen reading — retry."); return null; }
+        if (!position.IsFinite || !tilt.IsFinite) { Cancel("Nonfinite pen reading — retry.", retry: true); return null; }
         RequestedPose current;
         try { current = orientation(tilt); }
-        catch (CalibrationException ex) { Cancel(ex.Message); return null; }
+        catch (CalibrationException ex) { Cancel(ex.Message, retry: true); return null; }
         if (!OrientationGuidance.WithinTolerance(current, requested, settings.AngleToleranceDeg))
-        { Cancel("Pose left the angle tolerance — hold the requested pose and retry."); return null; }
+        { Cancel("Pose left the angle tolerance — hold the requested pose and retry.", retry: true); return null; }
         if (samples.Count == 0) first = time;
         last = time;
         samples.Add((position, tilt)); // Identical events still count.
@@ -63,10 +69,10 @@ public sealed class CaptureBurst(CaptureSettings settings, SourceGeometry geomet
         var tilt95 = samples.Select(s => Length(s.Tilt - t)).Order().ElementAt(rank);
         if (position95 > settings.PositionStabilityMm || tilt95 > settings.TiltStabilityDeg)
         {
-            Cancel($"Movement too large (95% position {position95:F2} mm, tilt {tilt95:F2}°). Hold still and retry.");
+            Cancel($"Movement too large (95% position {position95:F2} mm, tilt {tilt95:F2}°). Hold still and retry.", retry: true);
             return null;
         }
-        Active = false; Message = "Captured.";
+        Status = CaptureBurstStatus.Accepted; Message = "Captured.";
         return new(p, t, requested);
     }
 }

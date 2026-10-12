@@ -3,7 +3,10 @@ using System.Text.Json.Serialization;
 
 namespace CalibrationSuite.Core;
 
-public sealed class CalibrationException(string message) : Exception(message);
+public sealed class CalibrationException(string message, string? parameterName = null) : Exception(message)
+{
+    public string? ParameterName { get; } = parameterName;
+}
 
 public readonly record struct Point2(
     [property: JsonRequired] double X, [property: JsonRequired] double Y)

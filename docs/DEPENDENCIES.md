@@ -48,6 +48,10 @@ Other restored Microsoft, MessagePack, and Nerdbank runtime packages declare MIT
 
 Development deployment requires the complete Calibrator build output and the .NET 8 Windows Desktop runtime. The correction filter uses the host's OTD Plugin assembly at runtime. Milestone 3 packages only CalibrationSuite.Filter, CalibrationSuite.Core, and NetTopologySuite 2.6.0, with metadata and the complete pinned upstream NetTopologySuite license notice. No OTD, RPC, WPF, or HidSharpCore binaries are included in the filter ZIP. The package script uses an explicit file list and fixed ZIP timestamps. The build-workflow revision adds the official Plugin package; existing transitive dependency versions remain pinned. No release artifact has been published. Calibrator distribution/license checks and live install/update/removal verification remain delivery work.
 
+## Visual guidance
+
+Milestone 5 uses the existing WPF Windows Desktop runtime's vector drawing and geometry support. The 2026-10-05 review revision replaced the separate Viewport3D scene with thin guidance drawn at the physical crosshair. No rendering package or redistributable was added. Live updates redraw an arrow and reuse the target geometry between requested-pose/tolerance changes; the existing Huion/Giano adapter still owns raw-axis conversion and burst gates. The WPF-free top-view/tolerance and overlay placement helpers are in the shared core, while all WPF rendering remains in the Calibrator. `scripts/VisualChecks` references the Calibrator and pins the same existing dependency graph for offscreen layout/input verification.
+
 ## Acquisition limits
 
 The queue holds 512 events and a background consumer awaits reports directly, without polling. Monotonic ingress timestamps detect stale queued work; a two-second cancellation timer runs during report processing to detect a blocked parser, independently of RPC timeouts. Cleanup runs independently, even when a report was buffered before the consumer started. Waiting for reports leaves the timer disarmed, so ordinary pen absence never cancels preview. Latest readings expire after 500 ms to avoid presenting stale position/tilt as current.

@@ -4,7 +4,7 @@ A Windows calibrator for **display tablets**, using raw pen position and tilt fr
 
 This project has not been released. Earlier designs are iterations toward the first release, not supported data versions. Calibration data follows only the current structure, with no version tags, migrations, or backward-compatibility code. Development changes may require new calibration data.
 
-Milestone 4 capture/review is checkpointed at `2ec8a32`; physical review remains pending. The next planned work is [milestone 5: visual guidance and UI usability](docs/MILESTONE5.md), with shorter instructions, clearer hierarchy, visible relevant controls, and 3D arrow/target guidance. Final audit and delivery are milestone 6.
+Milestone 5's visual interface is implemented and awaiting user review: grouped visible settings, shorter instructions, thin arrow/target guidance, readiness colors and capture feedback at the physical crosshair, and compact secondary readings. See [verification and device review](docs/MILESTONE5.md). Final audit and delivery are milestone 6; physical capture/correction checks remain pending.
 
 ## Run
 
@@ -14,7 +14,9 @@ Start OTD with only the tablet being calibrated connected. From this repository:
 dotnet run --project src/CalibrationSuite.Calibrator -c Release --no-build --no-restore
 ~~~
 
-The app connects automatically. Move its normal window onto the tablet screen, choose capture settings, and press **Calibrate**. The default is 3 × 3 targets with 17 poses each (153 captures). Set **Azimuth directions** or **Non-upright altitude levels** to 0 for upright-only calibration. A small 2 × 2 upright-only layout is useful for the first workflow check. Settings live only in this app session; invalid settings are explained rather than adjusted silently.
+The app connects automatically. Move its normal window onto the tablet screen, choose capture settings, and press **Calibrate**. All inputs stay visible in **Target grid**, **Pen poses**, **Sampling**, and **Quality limits**; smaller windows scroll. The default is 3 × 3 targets with 17 poses each (153 captures). Set **Azimuth directions** or **Non-upright levels** to 0 for upright-only calibration. A small 2 × 2 upright-only layout is useful for the first workflow check. Settings live only in this app session; invalid settings are explained beside their input rather than adjusted silently.
+
+The starting capture limits are **±8° angle tolerance**, a **200 ms burst** with at least **20 reports**, **0.5 mm position stability**, and **3° tilt stability**. These allow more room to reach and hold a pose; tighten them later if your device and hand can reliably meet stricter limits. Stability measures the 95th-percentile deviation from the burst median. Every report must still meet the pose tolerance.
 
 Capture currently supports the **Huion Kamvas 13 (Gen 3)** with OTD's Giano parser, using the cardinal directions you verified. Known physical angle scale, diagonal conversion, and reachable poses still need the [milestone 4 device review](docs/MILESTONE4.md). Other tablet/parser combinations are unavailable for capture until their orientation semantics are verified. This limit applies to capture guidance, not the filter's raw-tilt interpolation.
 
@@ -26,6 +28,10 @@ Use the keyboard in the opaque full-screen window:
 - **Esc:** cancel the active burst and return to the main screen. Completed measurements remain available through **Resume Capture** or **Review Calibration**.
 
 At each target, capture upright, then all altitude levels for the first azimuth, all levels for the next azimuth, and so on. Azimuth describes the eraser direction: 0° left, 90° down, 180° right, 270° up. Altitude is 90° upright. **Minimum altitude** 50° allows at most 40° of lean. Live readings use the latest report; stored measurements use burst medians.
+
+Place the physical nib on the small open white crosshair center. The thin cyan arrow starts there and follows the pen's tilt, continuing **beyond the nib**, opposite the eraser direction. Put its tip inside the unfilled tolerance outline. Upright uses a small circle around the nib; tilted poses use a curved region offset from it.
+
+Follow the feedback at the crosshair: **amber** means adjust; **green arms with small end caps and a green target** mean pose ready — press Space. **Cyan arms and the growing arc around the nib** mean capture is in progress. A nearby **✓ Captured** identifies the completed target/pose. **↻** and a dashed target indicate retry; returning to a valid pose turns them green and shows **Ready to retry**. **Gray dotted arms and …** mean waiting for the pen. The short action or retry reason stays beside the nib, clear of the arrow and target outline. Overall progress, numeric angles, raw readings, burst counts, and static keyboard hints stay in the corner cards for inspection between attempts. Capture gates and the reported upright reference are unchanged.
 
 Lifting the pen between bursts preserves progress. A gap, pose failure, or excessive movement rejects only that attempt with a retry reason. Disconnects, geometry/DPI changes, overflow, or blocked processing end acquisition; resume with fresh geometry when ready. If debug cleanup is unconfirmed, restart OTD and Calibrator first. Close OTD's tablet debugger before capture; concurrent debugger use is unsupported.
 
@@ -113,6 +119,14 @@ Start with [milestone 2 examples and checks](docs/MILESTONE2.md). The core has n
 The core also supports upright-only calibration: zero azimuths or zero non-upright levels produces one pose per target. A single sample supplies a constant error at that target, blended across the screen using the same formula. The capture settings expose this option.
 
 The automated suite covers these mathematical and data rules using fictional measurements. It does not establish physical accuracy. Capture and review checks are described in docs/MILESTONE4.md.
+
+The offscreen WPF verifier renders setup, all capture states/directions, and review without connecting to OTD or opening capture windows:
+
+~~~powershell
+dotnet run --project scripts/VisualChecks -c Release
+~~~
+
+PNGs are written to `artifacts/visual-checks`. See [milestone 5](docs/MILESTONE5.md) for checked sizes, synthetic input checks, and remaining physical review.
 
 ## Calibration workflow
 

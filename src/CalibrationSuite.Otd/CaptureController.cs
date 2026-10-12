@@ -22,7 +22,14 @@ public static class CaptureDevice
 }
 
 public sealed record CaptureProgress(int Index, int Captured, int Total, Point2 Target, RequestedPose Pose,
-    bool Active, int BurstSamples, bool Complete, string Message);
+    bool Active, int BurstSamples, bool Complete, string Message)
+{
+    public CaptureBurstStatus BurstStatus { get; init; }
+    public double BurstProgress { get; init; }
+    public double BurstDurationMs { get; init; }
+    public double? AcceptedAtMs { get; init; }
+    public int? AcceptedIndex { get; init; }
+}
 
 // The lock only joins UI commands with the serialized acquisition consumer. WPF never samples a burst.
 public sealed class CaptureController
@@ -31,6 +38,8 @@ public sealed class CaptureController
     private readonly CaptureDraft draft;
     private readonly CaptureBurst burst;
     private readonly string? requiredReportType;
+    private double? acceptedAt;
+    private int? acceptedIndex;
     public static double Now => Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency;
 
     public CaptureController(CaptureDraft draft, Func<Point2, RequestedPose> orientation, string? requiredReportType = null)
@@ -53,8 +62,13 @@ public sealed class CaptureController
             var p = reading.Position.Value; var t = reading.Tilt.Value;
             var sample = burst.Add(time, new(p.X, p.Y), new(t.X, t.Y));
             if (sample == null) return;
-            try { draft.Store(sample); }
-            catch (CalibrationException ex) { burst.Cancel(ex.Message); }
+            try
+            {
+                int index = draft.CurrentIndex;
+                draft.Store(sample);
+                acceptedAt = time; acceptedIndex = index;
+            }
+            catch (CalibrationException ex) { burst.Cancel(ex.Message, retry: true); }
         }
     }
 
@@ -64,11 +78,19 @@ public sealed class CaptureController
     }
     public void Previous()
     {
-        lock (sync) { burst.Cancel("Previous pose — press Space to replace its measurement."); draft.Previous(); }
+        lock (sync)
+        {
+            burst.Cancel("Previous pose — press Space to replace its measurement."); draft.Previous();
+            acceptedAt = null; acceptedIndex = null;
+        }
     }
     public void Restart()
     {
-        lock (sync) { burst.Cancel("Capture restarted — press Space when ready."); draft.Restart(); }
+        lock (sync)
+        {
+            burst.Cancel("Capture restarted — press Space when ready."); draft.Restart();
+            acceptedAt = null; acceptedIndex = null;
+        }
     }
     public void Stop()
     {
@@ -80,7 +102,11 @@ public sealed class CaptureController
         {
             burst.CheckTimeout(now);
             return new(draft.CurrentIndex, draft.CapturedCount, draft.Total, draft.CurrentTarget, draft.CurrentPose,
-                burst.Active, burst.Count, draft.Complete, burst.Message);
+                burst.Active, burst.Count, draft.Complete, burst.Message)
+            {
+                BurstStatus = burst.Status, BurstProgress = burst.Progress, BurstDurationMs = burst.DurationMs,
+                AcceptedAtMs = acceptedAt, AcceptedIndex = acceptedIndex
+            };
         }
     }
 }

@@ -1,7 +1,6 @@
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
 using CalibrationSuite.Core;
 using CalibrationSuite.Otd;
 using Microsoft.Win32;
@@ -15,6 +14,7 @@ public sealed class MainWindow : Window
     private readonly CalibrationWorkspace workspace = new();
     private readonly CaptureSettingsPanel settings = new();
     private readonly TextBlock tabletName = Text();
+    private readonly TextBlock tabletDetail = Ui.Text("", 12, Ui.Muted);
     private readonly TextBlock total = Text();
     private readonly TextBlock state = Text();
     private readonly TextBlock status = Text();
@@ -27,24 +27,35 @@ public sealed class MainWindow : Window
     private TabletReference? readyTablet;
     private bool running, restartRequired, closingAccepted;
 
-    private static TextBlock Text(string value = "") => new() { Text = value, TextWrapping = TextWrapping.Wrap, Margin = new(0, 8, 0, 8) };
+    private static TextBlock Text(string value = "") => Ui.Text(value);
 
     public MainWindow()
     {
-        Title = "Calibration Suite"; Width = Math.Min(720, SystemParameters.WorkArea.Width); Height = Math.Min(800, SystemParameters.WorkArea.Height); MinWidth = 540; MinHeight = 420;
-        Background = new SolidColorBrush(Color.FromRgb(246, 247, 249));
-        var panel = new StackPanel { Margin = new(28) };
-        panel.Children.Add(new TextBlock { Text = "Calibration Suite", FontSize = 30, FontWeight = FontWeights.SemiBold });
-        panel.Children.Add(Text("Move this window onto your tablet screen. Its full drawing area must match the full screen, with X right and Y down. Aim with the physical nib, not the cursor."));
-        panel.Children.Add(Text("Connect only that tablet and close OTD's tablet debugger. Disable other filters while calibrating, then restore them afterward. You may lift the pen and pause between captures."));
+        SetResourceReference(StyleProperty, typeof(Window));
+        Title = "Calibration Suite"; Width = Math.Min(920, SystemParameters.WorkArea.Width); Height = Math.Min(850, SystemParameters.WorkArea.Height); MinWidth = 560; MinHeight = 420;
+        var panel = new StackPanel { Margin = new(24) };
+        panel.Children.Add(Ui.Heading("Calibration Suite", 28));
+        var intro = Text("Move this window to your tablet screen, then calibrate."); intro.Margin = new(0, 4, 0, 16); panel.Children.Add(intro);
         tabletName.Text = "Connecting to OTD…";
-        panel.Children.Add(tabletName); panel.Children.Add(settings); panel.Children.Add(total);
+        tabletName.FontWeight = FontWeights.SemiBold;
+        tabletDetail.Text = "Connect one display tablet and start OTD."; tabletDetail.Margin = new(0, 4, 0, 0);
+        var connection = new StackPanel(); connection.Children.Add(tabletName); connection.Children.Add(tabletDetail);
+        var connectionCard = Ui.Card(connection); connectionCard.Margin = new(0, 0, 0, 12); panel.Children.Add(connectionCard);
+        panel.Children.Add(settings);
+        total.FontSize = 17; total.FontWeight = FontWeights.SemiBold; total.Margin = new(0, 0, 0, 10); panel.Children.Add(total);
         var actions = new WrapPanel();
         foreach (var button in new[] { start, resume, review, copy })
-        { button.Padding = new(12, 7, 12, 7); button.Margin = new(0, 6, 8, 6); actions.Children.Add(button); }
-        panel.Children.Add(actions); panel.Children.Add(state);
-        panel.Children.Add(Text(CalibrationWorkspace.CopyReminder)); panel.Children.Add(status);
-        Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        { button.Margin = new(0, 0, 8, 8); actions.Children.Add(button); }
+        Ui.Primary(start); start.ToolTip = "Aim with the physical nib. Disable other filters during capture, then restore them.";
+        copy.ToolTip = CalibrationWorkspace.CopyReminder;
+        panel.Children.Add(actions);
+        var setupHint = Ui.Text("Close OTD's debugger. Aim with the nib; you may lift or pause between captures. Disable other filters, then restore them.", 12, Ui.Muted);
+        setupHint.Margin = new(0, 0, 0, 12); panel.Children.Add(setupHint);
+        state.Margin = new(0, 0, 0, 4); panel.Children.Add(state);
+        var saveHint = Ui.Text("Accepted data → Copy → paste in OTD → Save. Measurements stay in this app session until saved in OTD.", 12, Ui.Muted);
+        panel.Children.Add(saveHint);
+        status.Margin = new(0, 12, 0, 0); status.Foreground = Ui.Accent; panel.Children.Add(status);
+        Content = new ScrollViewer { Content = panel, Background = Ui.Brush("#F5F7FB"), VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         settings.Changed += Refresh;
         Loaded += async (_, _) => await MonitorTabletAsync();
         start.Click += async (_, _) => await CaptureAsync(true);
@@ -52,7 +63,7 @@ public sealed class MainWindow : Window
         review.Click += async (_, _) => await ReviewAsync();
         copy.Click += (_, _) =>
         {
-            try { Clipboard.SetText(workspace.CopyPayload()); status.Text = "Calibration copied. " + CalibrationWorkspace.CopyReminder; }
+            try { Clipboard.SetText(workspace.CopyPayload()); status.Text = "✓ Calibration copied. Paste into OTD's Calibration data field and Save."; }
             catch (Exception ex) { status.Text = $"Could not copy calibration: {ex.Message}. Try Copy Calibration again."; }
         };
         SystemEvents.DisplaySettingsChanged += OnDisplayChanged;
@@ -67,15 +78,16 @@ public sealed class MainWindow : Window
         settings.IsEnabled = !running; start.IsEnabled = false;
         try
         {
-            var value = settings.Read();
+            var value = settings.Read(readyTablet == null ? null : CaptureDevice.Geometry(readyTablet));
             int poses = value.AzimuthCount == 0 || value.NonUprightAltitudeCount == 0 ? 1
                 : checked(1 + value.AzimuthCount * value.NonUprightAltitudeCount);
             int count = value.TotalCaptures;
-            if (readyTablet != null) _ = value.CreateGrid(CaptureDevice.Geometry(readyTablet));
-            total.Text = $"{value.RowCount} × {value.ColumnCount} targets · {poses} poses each · {count} captures total";
+            total.Foreground = Ui.Ink;
+            total.Text = $"{count} captures  ·  {value.RowCount} × {value.ColumnCount} targets  ·  {poses} poses each";
             start.IsEnabled = ready;
         }
-        catch (Exception ex) when (ex is CalibrationException or OverflowException) { total.Text = ex is OverflowException ? "Capture counts are too large." : ex.Message; }
+        catch (Exception ex) when (ex is CalibrationException or OverflowException)
+        { total.Foreground = Ui.Error; total.Text = "Check capture settings before starting."; }
         resume.Visibility = workspace.Session != null ? Visibility.Visible : Visibility.Collapsed;
         resume.IsEnabled = ready;
         review.IsEnabled = !running && workspace.HasSessionData;
@@ -98,14 +110,20 @@ public sealed class MainWindow : Window
                     if (!running && !lifetime.IsCancellationRequested)
                     {
                         readyTablet = tablet;
-                        tabletName.Text = tablet.Properties.Name + (CaptureDevice.Supported(tablet)
-                            ? " — ready. Guidance uses verified tilt directions. Check known physical angles during first-use review."
-                            : " — capture unavailable: orientation guidance has not been verified for this tablet/parser.");
+                        bool supported = CaptureDevice.Supported(tablet);
+                        tabletName.Text = (supported ? "● Ready · " : "! Unavailable · ") + tablet.Properties.Name;
+                        tabletName.Foreground = supported ? Ui.Ink : Ui.Error;
+                        tabletDetail.Text = supported ? "Verified tilt directions · check physical angles during first-use review."
+                            : "Capture orientation has not been verified for this tablet/parser.";
                     }
                 }
                 catch (Exception ex)
                 {
-                    if (!running) { readyTablet = null; tabletName.Text = $"Start OTD and connect your display tablet. {ex.Message}"; }
+                    if (!running)
+                    {
+                        readyTablet = null; tabletName.Text = "Waiting for OTD / tablet"; tabletName.Foreground = Ui.Ink;
+                        tabletDetail.Text = $"Start OTD and connect one display tablet. {ex.Message}";
+                    }
                 }
                 Refresh();
             }
