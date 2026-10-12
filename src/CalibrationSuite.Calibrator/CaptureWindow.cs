@@ -17,7 +17,8 @@ public sealed class CaptureWindow : Window
 
     public CaptureWindow(AcquisitionSession acquisition, CaptureController capture, CaptureDraft draft, string tabletName, DisplayGeometry display)
     {
-        this.acquisition = acquisition; this.capture = capture;
+        this.acquisition = acquisition;
+        this.capture = capture;
         SetResourceReference(StyleProperty, typeof(Window)); Background = Ui.Brush("#101A28");
         Title = "Calibration Suite — capture"; WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
         view = new(draft.Settings, draft.Geometry, tabletName); Content = view;
@@ -55,7 +56,12 @@ public sealed class CaptureWindow : Window
     {
         double now = CaptureController.Now;
         var state = capture.Snapshot(now);
-        if (state.Complete) { acquisition.Cancel("Capture complete. Review the candidate before accepting."); Close(); return; }
+        if (state.Complete)
+        {
+            acquisition.Cancel("Capture complete. Review the candidate before accepting.");
+            Close();
+            return;
+        }
         if (!positioned) return;
         view.Update(state, acquisition.Latest, now);
     }

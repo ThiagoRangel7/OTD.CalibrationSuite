@@ -101,8 +101,7 @@ public sealed class CaptureSettingsPanel : Grid
                 TiltStabilityDeg = Number(nameof(CaptureSettings.TiltStabilityDeg)), ReportGapTimeoutMs = Count(nameof(CaptureSettings.ReportGapTimeoutMs)),
                 CaptureTimeoutMs = Count(nameof(CaptureSettings.CaptureTimeoutMs))
             };
-            value.Validate();
-            if (geometry != null) _ = value.CreateGrid(geometry);
+            value.Validate(geometry);
             return value;
         }
         catch (CalibrationException ex)

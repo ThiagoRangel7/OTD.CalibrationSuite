@@ -11,9 +11,19 @@ namespace CalibrationSuite.Tests;
 public class CaptureTests
 {
     private static readonly SourceGeometry Geometry = new(20000, 10000, 200, 200);
-    private static readonly CaptureSettings Settings = new() { RowCount = 2, ColumnCount = 2, AzimuthCount = 0,
-        CaptureWindowMs = 10, MinSamplesPerCapture = 2, CaptureTimeoutMs = 100, ReportGapTimeoutMs = 40,
-        AngleToleranceDeg = 3, PositionStabilityMm = 0.25, TiltStabilityDeg = 2 };
+    private static readonly CaptureSettings Settings = new()
+    {
+        RowCount = 2,
+        ColumnCount = 2,
+        AzimuthCount = 0,
+        CaptureWindowMs = 10,
+        MinSamplesPerCapture = 2,
+        CaptureTimeoutMs = 100,
+        ReportGapTimeoutMs = 40,
+        AngleToleranceDeg = 3,
+        PositionStabilityMm = 0.25,
+        TiltStabilityDeg = 2
+    };
     private static RequestedPose Orientation(Point2 tilt) => CaptureDevice.Orientation(tilt, 3);
     private static CaptureBurst Burst(CaptureSettings? settings = null) => new(settings ?? Settings, Geometry, Orientation);
 
@@ -42,6 +52,57 @@ public class CaptureTests
         Assert.Equal(new Point2(101, 202), sample!.Position);
         Assert.Equal(new Point2(1, 0.5), sample.Tilt);
         Assert.Equal(new RequestedPose(90), sample.RequestedPose);
+    }
+
+    [Fact]
+    public void BurstStatisticsDoNotRetainValuesFromLongerPreviousAttempts()
+    {
+        var burst = Burst();
+        burst.Start(new(90), 0);
+        for (int i = 0; i < 12; i++) burst.Add(0, new(1000, 2000), default);
+        Assert.NotNull(burst.Add(10, new(1000, 2000), default));
+        burst.Start(new(90), 20);
+        burst.Add(20, new(10, 20), new(0, 1));
+        var result = burst.Add(30, new(12, 24), new(2, 0));
+        Assert.Equal(new Point2(11, 22), result!.Position);
+        Assert.Equal(new Point2(1, 0.5), result.Tilt);
+    }
+
+    [Fact]
+    public void RestartingPartialRecaptureClearsOnlyItsStoredSelection()
+    {
+        var original = new CaptureDraft(Settings with { AzimuthCount = 4, NonUprightAltitudeCount = 1 }, Geometry);
+        Fill(original);
+        var recapture = original.Recapture(7, true);
+        recapture.Previous();
+        Assert.Equal(5, recapture.CurrentIndex);
+        recapture.Store(new(recapture.CurrentTarget, default));
+        Assert.Equal(original.Total - 4, recapture.CapturedCount);
+        recapture.Previous();
+        recapture.Previous();
+        Assert.Equal(5, recapture.CurrentIndex);
+        recapture.Restart();
+        Assert.Equal(original.Total - 5, recapture.CapturedCount);
+        recapture.Restart();
+        Assert.Equal(original.Total - 5, recapture.CapturedCount);
+        Assert.Equal(original.Total, original.CapturedCount);
+        Assert.Same(original.Sample(0), recapture.Sample(0));
+    }
+
+    [Fact]
+    public void AcceptedCopyIsASnapshotOfTheAcceptedMeasurements()
+    {
+        var workspace = new CalibrationWorkspace();
+        workspace.Begin(Settings, Geometry);
+        Fill(workspace.Session!, new(1, 2));
+        workspace.Finish();
+        workspace.Accept();
+        string accepted = workspace.CopyPayload();
+        workspace.Working!.ToData().Grid!.PreTransformRowCoordinates[0] = double.NaN;
+        Assert.Equal(accepted, workspace.CopyPayload());
+        workspace.Begin(Settings, Geometry);
+        workspace.Discard();
+        Assert.Equal(accepted, workspace.CopyPayload());
     }
 
     [Fact]
@@ -135,6 +196,20 @@ public class CaptureTests
                 Math.Atan(magnitude * Math.Sin(azimuth)) * 180 / Math.PI);
             draft.Store(new(draft.CurrentTarget + offset, tilt));
         }
+    }
+
+    [Theory]
+    [InlineData(0.06, 0.08, false)]
+    [InlineData(0.101, 0, true)]
+    public void CaptureSeparationUsesMeasuredTiltAndRejectsTheMinimumBoundary(double x, double y, bool accepted)
+    {
+        var draft = new CaptureDraft(Settings with { AzimuthCount = 4, NonUprightAltitudeCount = 1 }, Geometry);
+        draft.Store(new(draft.CurrentTarget, default));
+        var sample = new CalibrationSample(draft.CurrentTarget, new(x, y));
+        if (accepted) draft.Store(sample);
+        else Assert.Throws<CalibrationException>(() => draft.Store(sample));
+        Assert.Equal(accepted ? 2 : 1, draft.CapturedCount);
+        Assert.Equal(accepted ? 2 : 1, draft.CurrentIndex);
     }
 
     [Fact]
@@ -291,6 +366,7 @@ public class CaptureTests
     {
         var draft = new CaptureDraft(Settings with { AzimuthCount = 4, NonUprightAltitudeCount = 1 }, Geometry); Fill(draft);
         var replacement = draft.Recapture(4, false);
+        replacement.Previous(); Assert.Equal(4, replacement.CurrentIndex);
         Assert.Throws<CalibrationException>(() => replacement.Store(new(replacement.CurrentTarget, new(20, 20))));
         Assert.False(replacement.Complete); Assert.Null(replacement.Sample(4)); Assert.NotNull(draft.Sample(4));
         Fill(replacement); Assert.NotNull(replacement.ToData());

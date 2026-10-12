@@ -88,6 +88,7 @@ internal static class Program
         CheckTargetSpace();
         CheckStableGuide();
         CheckLocalFeedback();
+        CheckReusedCaptureLayout();
 
         var workspace = new CalibrationWorkspace();
         workspace.Begin(new() { RowCount = 2, ColumnCount = 2, AzimuthCount = 0 }, Geometry);
@@ -155,8 +156,8 @@ internal static class Program
 
     private static void CheckCaptureBounds(CaptureView view, Point2 rawTarget)
     {
-        var hud = Descendants(view).OfType<Border>().First(b => b.Child is Grid);
-        var panel = (Grid)hud.Child;
+        var hud = Descendants(view).OfType<Border>().Single(b => b.Name == "CaptureSummary");
+        var panel = (StackPanel)hud.Child;
         foreach (var child in panel.Children.OfType<FrameworkElement>().Where(c => c.Visibility == Visibility.Visible))
         {
             var bounds = child.TransformToAncestor(panel).TransformBounds(new Rect(child.RenderSize));
@@ -168,7 +169,7 @@ internal static class Program
             || Math.Abs(scene.Anchor.Y - rawTarget.Y / Geometry.MaxY * view.ActualHeight) > 0.0001)
             throw new InvalidOperationException("Orientation guide is not anchored to the mapped physical crosshair.");
         CheckPrecision(scene);
-        var details = Descendants(view).OfType<Border>().First(b => b.Child is StackPanel && b.Parent is Canvas);
+        var details = Descendants(view).OfType<Border>().Single(b => b.Name == "CaptureDetails");
         if (details.Child.RenderSize.Height > details.ActualHeight - details.Padding.Top - details.Padding.Bottom + 1)
             throw new InvalidOperationException("Readings/keyboard hints overflow their panel.");
         var cardBounds = new List<OverlayBounds>();
@@ -261,6 +262,23 @@ internal static class Program
             radius = guide.Radius;
         }
         Console.WriteLine("Crosshair guidance keeps its scale across ordinary capture-state transitions.");
+    }
+
+    private static void CheckReusedCaptureLayout()
+    {
+        var view = new CaptureView(Settings, Geometry, "Synthetic viewport changes");
+        foreach (var (width, height) in new[] { (1920, 1080), (640, 360), (960, 540), (900, 650), (640, 360) })
+        {
+            var state = State(CaptureCue.Capturing) with { Target = new(10000, 5000) };
+            view.Update(state, Reading(new(20, 0)), 1000);
+            Save(view, width, height, 1, $"capture-resize-{width}-{height}");
+            CheckCaptureBounds(view, state.Target);
+            state = state with { BurstSamples = 10000, BurstDurationMs = 12345 };
+            view.Update(state, Reading(new(20, 0)) with { Position = new(12345, 6789) }, 1000);
+            Save(view, width, height, 1, $"capture-resize-readings-{width}-{height}");
+            CheckCaptureBounds(view, state.Target);
+        }
+        Console.WriteLine("Reused capture views adapt to viewport and reading-size changes without stale geometry or clipped cards.");
     }
 
     private static void CheckLocalFeedback()

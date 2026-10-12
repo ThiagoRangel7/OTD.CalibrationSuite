@@ -6,13 +6,6 @@ public static class PreviewGeometry
 {
     public static bool Finite(Vector2 value) => float.IsFinite(value.X) && float.IsFinite(value.Y);
 
-    public static Vector2[] Targets(float widthMm, float heightMm, float maxX, float maxY)
-    {
-        var grid = new CaptureSettings().CreateGrid(new(maxX, maxY, widthMm, heightMm));
-        return grid.PreTransformRowCoordinates.SelectMany(y => grid.PreTransformColumnCoordinates
-            .Select(x => new Vector2((float)x, (float)y))).ToArray();
-    }
-
     // The full digitizer covers the full preview. WPF supplies viewport dimensions in DIPs.
     public static Vector2 ToDisplay(Vector2 rawTarget, Vector2 rawSize, Vector2 viewportSize) =>
         rawTarget / rawSize * viewportSize;

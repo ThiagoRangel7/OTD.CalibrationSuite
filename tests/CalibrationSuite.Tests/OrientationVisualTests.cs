@@ -110,25 +110,31 @@ public class OrientationVisualTests
                 double distance = Math.Sqrt(Math.Pow(target.X - nearestX, 2) + Math.Pow(target.Y - nearestY, 2));
                 Assert.True(distance >= 32 - 1e-8, $"Aiming point {target} too close to HUD: {distance}"); // 20-DIP reticle + 12-DIP gap.
                 double secondaryHeight = 106;
-                var primaryBounds = new OverlayBounds(overlay.Left, overlay.Top, pw, ph);
-                var secondary = CaptureOverlay.PlaceSecondary(width, height, target, primaryBounds, pw, secondaryHeight, margin);
-                var secondaryBounds = new OverlayBounds(secondary.Left, secondary.Top, pw, secondaryHeight);
-                Assert.False(secondaryBounds.Overlaps(primaryBounds, 8));
+                var secondary = CaptureOverlay.Place(width, height, target, pw, secondaryHeight, margin, overlay);
+                Assert.False(secondary.Overlaps(overlay, 8));
                 nearestX = Math.Clamp(target.X, secondary.Left, secondary.Left + pw);
                 nearestY = Math.Clamp(target.Y, secondary.Top, secondary.Top + secondaryHeight);
                 distance = Math.Sqrt(Math.Pow(target.X - nearestX, 2) + Math.Pow(target.Y - nearestY, 2));
                 Assert.True(distance >= 32 - 1e-8, $"Aiming point {target} too close to readings: {distance}");
-                double radius = CaptureOverlay.GuidanceRadius(width, height, target, primaryBounds, secondaryBounds);
+                double radius = CaptureOverlay.GuidanceRadius(width, height, target, overlay, secondary);
                 Assert.InRange(radius, 0, CaptureOverlay.MaxGuidanceRadius);
                 Assert.True(radius + 5 <= Math.Min(Math.Min(target.X, width - target.X), Math.Min(target.Y, height - target.Y)) || radius == 0);
-                Assert.True(radius + 12 <= primaryBounds.DistanceTo(target));
-                Assert.True(radius + 12 <= secondaryBounds.DistanceTo(target));
+                Assert.True(radius + 12 <= overlay.DistanceTo(target));
+                Assert.True(radius + 12 <= secondary.DistanceTo(target));
             }
     }
 
     private static readonly SourceGeometry Geometry = new(20000, 10000, 200, 200);
-    private static readonly CaptureSettings Settings = new() { RowCount = 2, ColumnCount = 2, AzimuthCount = 0,
-        CaptureWindowMs = 10, MinSamplesPerCapture = 4, CaptureTimeoutMs = 100, ReportGapTimeoutMs = 40 };
+    private static readonly CaptureSettings Settings = new()
+    {
+        RowCount = 2,
+        ColumnCount = 2,
+        AzimuthCount = 0,
+        CaptureWindowMs = 10,
+        MinSamplesPerCapture = 4,
+        CaptureTimeoutMs = 100,
+        ReportGapTimeoutMs = 40
+    };
     private static ReportReading Reading(double time) => new((long)Math.Round(time * Stopwatch.Frequency / 1000), new(100, 100), Vector2.Zero, 0, "Paired raw pen reading");
 
     [Fact]

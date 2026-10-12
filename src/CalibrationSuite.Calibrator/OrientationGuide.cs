@@ -18,6 +18,7 @@ public sealed class OrientationGuide : FrameworkElement
     private static readonly Pen RetryLine = Line("#FFD18B", 1, DashStyles.Dash);
     private readonly MatrixTransform placement = new();
     private Geometry outline = Geometry.Empty;
+    private Geometry? outlineStroke;
     private RequestedPose requested = new(90);
     private RequestedPose? current;
     private double tolerance = -1, progress;
@@ -32,11 +33,13 @@ public sealed class OrientationGuide : FrameworkElement
     {
         bounds.Inflate(4, 4);
         if (bounds.IntersectsWith(new Rect(Anchor.X - 28, Anchor.Y - 28, 56, 56))) return true;
-        if (bounds.IntersectsWith(outline.Bounds)
-            && outline.GetFlattenedPathGeometry(0.1, ToleranceType.Absolute).GetWidenedPathGeometry(TargetLine)
-                .FillContainsWithDetail(new RectangleGeometry(bounds)) != IntersectionDetail.Empty) return true;
-        if (current == null) return false;
-        var tip = OrientationScene.ArrowTip(current) * Radius + Anchor;
+        if (bounds.IntersectsWith(outline.Bounds))
+        {
+            var stroke = outlineStroke ??= outline.GetFlattenedPathGeometry(0.1, ToleranceType.Absolute).GetWidenedPathGeometry(TargetLine);
+            if (stroke.FillContainsWithDetail(new RectangleGeometry(bounds)) != IntersectionDetail.Empty) return true;
+        }
+        if (current is not { } live) return false;
+        var tip = OrientationScene.ArrowTip(live) * Radius + Anchor;
         var arrowBounds = new Rect(new Point(Anchor.X, Anchor.Y), new Point(tip.X, tip.Y));
         arrowBounds.Inflate(2, 2);
         return bounds.IntersectsWith(arrowBounds);
@@ -49,6 +52,7 @@ public sealed class OrientationGuide : FrameworkElement
         if (anchor == Anchor && radius == Radius) return;
         Anchor = anchor; Radius = radius;
         placement.Matrix = new(radius, 0, 0, radius, anchor.X, anchor.Y);
+        outlineStroke = null;
         InvalidateVisual();
     }
 
@@ -59,6 +63,7 @@ public sealed class OrientationGuide : FrameworkElement
         {
             outline = TargetOutline(OrientationScene.TargetSpace(next, toleranceDeg));
             outline.Transform = placement;
+            outlineStroke = null;
         }
         requested = next; current = live; tolerance = toleranceDeg; cue = nextCue; progress = burstProgress; readyToRetry = retryReady;
         InvalidateVisual();
@@ -83,7 +88,6 @@ public sealed class OrientationGuide : FrameworkElement
             _ => TargetLine
         };
         // Keep the live tip distinct from the tolerance boundary in every state.
-        var arrowLine = LiveLine;
         dc.DrawGeometry(null, stateLine, outline);
         foreach (var (dx, dy) in new[] { (-1, 0), (1, 0), (0, -1), (0, 1) })
             dc.DrawLine(stateLine, new(center.X + dx * 7, center.Y + dy * 7), new(center.X + dx * 20, center.Y + dy * 20));
@@ -106,17 +110,17 @@ public sealed class OrientationGuide : FrameworkElement
             }
             dc.DrawGeometry(null, LiveLine, arc);
         }
-        if (current != null)
+        if (current is { } live)
         {
-            var tip = End(current); var direction = tip - center;
-            dc.DrawLine(arrowLine, center, tip);
+            var tip = End(live); var direction = tip - center;
+            dc.DrawLine(LiveLine, center, tip);
             if (direction.Length >= 6)
             {
                 direction.Normalize();
                 var tail = tip - direction * 4; var side = new Vector(-direction.Y, direction.X) * 2;
-                dc.DrawLine(arrowLine, tail + side, tip); dc.DrawLine(arrowLine, tail - side, tip);
+                dc.DrawLine(LiveLine, tail + side, tip); dc.DrawLine(LiveLine, tail - side, tip);
             }
-            else dc.DrawEllipse(null, arrowLine, tip, 1, 1); // Upright collapses to the nib; keep the endpoint open.
+            else dc.DrawEllipse(null, LiveLine, tip, 1, 1); // Upright collapses to the nib; keep the endpoint open.
         }
         dc.DrawEllipse(null, NibLine, center, 2, 2);
     }

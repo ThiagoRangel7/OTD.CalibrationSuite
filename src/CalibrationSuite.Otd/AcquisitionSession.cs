@@ -11,7 +11,7 @@ public sealed record AcquisitionOptions(int Capacity = 512, int StallMillisecond
 public sealed class AcquisitionSession
 {
     private readonly IAcquisitionDaemon daemon;
-    private readonly TabletReference tablet;
+    private readonly Func<TabletReference?, bool> matchesTablet;
     private readonly AcquisitionOptions options;
     private readonly Func<DebugReportData, long, ReportReading> reconstruct;
     private readonly CancellationTokenSource stop = new();
@@ -28,7 +28,7 @@ public sealed class AcquisitionSession
         AcquisitionOptions? options = null, Func<DebugReportData, long, ReportReading>? reconstruct = null)
     {
         this.daemon = daemon;
-        this.tablet = tablet;
+        matchesTablet = TabletSelection.CreateMatcher(tablet);
         this.options = options ?? new();
         this.reconstruct = reconstruct ?? ReportReadingFactory.Read;
         if (this.options.Capacity <= 0 || this.options.StallMilliseconds <= 0
@@ -67,7 +67,7 @@ public sealed class AcquisitionSession
         try
         {
             var connected = TabletSelection.Single(await daemon.GetTablets().WaitAsync(RpcTimeout, stop.Token));
-            if (!TabletSelection.Same(tablet, connected))
+            if (!matchesTablet(connected))
                 throw new InvalidOperationException("Connected tablet changed. Start again.");
             stop.Token.ThrowIfCancellationRequested();
             enable = daemon.SetDebug(true);
@@ -87,38 +87,39 @@ public sealed class AcquisitionSession
             daemon.DeviceReport -= OnReport;
             daemon.Invalidated -= OnInvalidated;
             queue.Writer.TryComplete();
-            if (enable != null)
-            {
-                // One ordered cleanup task also handles an enable reply arriving after timeout.
-                var cleanup = DisableAfterEnableAsync(enable);
-                try
-                {
-                    await cleanup.WaitAsync(RpcTimeout);
-                }
-                catch (Exception ex)
-                {
-                    RestartRequired = true;
-                    reason = $"{reason} Debug cleanup could not be confirmed ({ex.Message}). Restart OTD and Calibrator before retrying.";
-                    _ = ObserveAsync(cleanup);
-                }
-            }
-            if (worker != null)
-            {
-                try { await worker.WaitAsync(TimeSpan.FromMilliseconds(200)); }
-                catch (TimeoutException)
-                {
-                    RestartRequired = true;
-                    reason += " Report parser has not stopped; restart Calibrator before retrying.";
-                    _ = ObserveAsync(worker);
-                }
-                catch { /* The worker failure or cancellation has already ended this session. */ }
-            }
+            if (enable != null) await ConfirmDebugDisabledAsync(enable);
+            if (worker != null) await WaitForConsumerAsync(worker);
         }
         return reason ?? "Acquisition ended.";
     }
 
     private TimeSpan RpcTimeout => TimeSpan.FromMilliseconds(options.RpcTimeoutMilliseconds);
     private TimeSpan ConsumerTimeout => TimeSpan.FromMilliseconds(options.StallMilliseconds);
+
+    private async Task ConfirmDebugDisabledAsync(Task enable)
+    {
+        // One ordered cleanup task also handles an enable reply arriving after timeout.
+        var cleanup = DisableAfterEnableAsync(enable);
+        try { await cleanup.WaitAsync(RpcTimeout); }
+        catch (Exception ex)
+        {
+            RestartRequired = true;
+            reason = $"{reason} Debug cleanup could not be confirmed ({ex.Message}). Restart OTD and Calibrator before retrying.";
+            _ = ObserveAsync(cleanup);
+        }
+    }
+
+    private async Task WaitForConsumerAsync(Task worker)
+    {
+        try { await worker.WaitAsync(TimeSpan.FromMilliseconds(200)); }
+        catch (TimeoutException)
+        {
+            RestartRequired = true;
+            reason += " Report parser has not stopped; restart Calibrator before retrying.";
+            _ = ObserveAsync(worker);
+        }
+        catch { /* The worker failure or cancellation has already ended this session. */ }
+    }
 
     private static async Task ObserveAsync(Task task)
     {
@@ -140,7 +141,7 @@ public sealed class AcquisitionSession
             stop.CancelAfter(ConsumerTimeout);
             if (Stopwatch.GetElapsedTime(item.Timestamp).TotalMilliseconds > options.StallMilliseconds)
                 throw new InvalidOperationException("Report consumer stalled; stale queue discarded.");
-            if (TabletSelection.Same(tablet, item.Data.Tablet))
+            if (matchesTablet(item.Data.Tablet))
             {
                 var reading = reconstruct(item.Data, item.Timestamp);
                 stop.Token.ThrowIfCancellationRequested();

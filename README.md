@@ -64,6 +64,8 @@ Building **CalibrationSuite.Filter**, or the whole solution, automatically creat
 - Debug: **artifacts/filter-package/Debug/CalibrationSuite.zip**, including matching PDB debugging symbols.
 - Release: **artifacts/filter-package/Release/CalibrationSuite.zip**, for normal installation.
 
+Unchanged builds reuse the ZIP. Changes to its assemblies, Debug symbols, metadata, notices, or packaging script regenerate it; a missing ZIP is recreated automatically.
+
 To debug the filter, install the Debug ZIP through OTD's Plugin Manager, then restart OTD so the new assembly is loaded. This is an explicit installation step; building never overwrites your installed plugin or settings.
 
 In Visual Studio choose **Debug → Attach to Process**, select **OpenTabletDriver.Daemon**, and attach using managed .NET debugging. In VS Code select **Attach to OTD daemon** in **Run and Debug** and choose that same process. Set a breakpoint in CalibrationFilter.Consume and move the pen. To catch Initialize, attach first, then choose **Apply** in OTD. If a breakpoint is hollow/unbound, confirm that the installed DLL and local PDB are from the same build; reinstall the Debug ZIP and restart OTD after changes. VS Code includes local symbol search paths; in Visual Studio use **Debug → Windows → Modules → Load Symbols** if needed.
@@ -116,6 +118,8 @@ Run it under the same Windows user as OTD. See [milestone evidence and device ch
 
 Start with [milestone 2 examples and checks](docs/MILESTONE2.md). The core has no WPF or OTD dependency: `CalibrationData` handles calibration JSON, `CaptureSettings` resolves grid/poses, `NodeMesh` interpolates measured tilt errors, and `PreparedCalibration` combines four nodes to correct raw position. Loading invalid data returns identity with a diagnostic; no original JSON is rewritten. Preparing copies evaluator inputs so subsequent edits cannot affect a running snapshot.
 
+Capture drafts own their grid/poses, and targeted recapture copies the measurements. Accepted JSON is cached as a snapshot. Settings and reports are validated when they enter the workflow; each completed node is checked once. The main window coordinates acquisition directly, while capture views render snapshots and send commands.
+
 The core also supports upright-only calibration: zero azimuths or zero non-upright levels produces one pose per target. A single sample supplies a constant error at that target, blended across the screen using the same formula. The capture settings expose this option.
 
 The automated suite covers these mathematical and data rules using fictional measurements. It does not establish physical accuracy. Capture and review checks are described in docs/MILESTONE4.md.
@@ -127,6 +131,14 @@ dotnet run --project scripts/VisualChecks -c Release
 ~~~
 
 PNGs are written to `artifacts/visual-checks`. See [milestone 5](docs/MILESTONE5.md) for checked sizes, synthetic input checks, and remaining physical review.
+
+Run the repeatable synthetic performance checks with:
+
+~~~powershell
+dotnet run --project scripts/PerformanceChecks -c Release
+~~~
+
+The runner measures tablet comparison, large-session progress reads, correction inside/outside tilt coverage, and capture-burst statistics without connecting to a daemon. See the [optimization report](docs/OPTIMIZATION.md) for measured results, changes, and verification.
 
 ## Calibration workflow
 

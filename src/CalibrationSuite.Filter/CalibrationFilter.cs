@@ -45,29 +45,38 @@ public sealed class CalibrationFilter : IPositionedPipelineElement<IDeviceReport
     public event Action<IDeviceReport>? Emit;
     public void Consume(IDeviceReport report)
     {
-        if (!calibration.IsIdentity
-            && report is not OutOfRangeReport
-            && report is not IProximityReport { NearProximity: false }
-            && report is not IEraserReport { Eraser: true })
-        {
-            if (report is IAbsolutePositionReport position && report is ITiltReport tilt)
-            {
-                var raw = position.Position;
-                var orientation = tilt.Tilt;
-                if (float.IsFinite(raw.X) && float.IsFinite(raw.Y)
-                    && float.IsFinite(orientation.X) && float.IsFinite(orientation.Y))
-                {
-                    var corrected = calibration.Correct(new(raw.X, raw.Y), new(orientation.X, orientation.Y));
-                    var result = new Vector2((float)corrected.X, (float)corrected.Y);
-                    if (float.IsFinite(result.X) && float.IsFinite(result.Y))
-                        position.Position = result; // Interface reference mutates the original box, including structs.
-                    else Unsupported();
-                }
-                else Unsupported();
-            }
-            else if (report is IAbsolutePositionReport || report is ITiltReport) Unsupported();
-        }
+        if (!calibration.IsIdentity) CorrectPosition(report);
         Emit?.Invoke(report);
+    }
+
+    private void CorrectPosition(IDeviceReport report)
+    {
+        if (report is OutOfRangeReport or IProximityReport { NearProximity: false } or IEraserReport { Eraser: true })
+            return;
+
+        if (report is not IAbsolutePositionReport position || report is not ITiltReport tilt)
+        {
+            if (report is IAbsolutePositionReport or ITiltReport) Unsupported();
+            return;
+        }
+
+        var raw = position.Position;
+        var orientation = tilt.Tilt;
+        if (!PreviewGeometry.Finite(raw) || !PreviewGeometry.Finite(orientation))
+        {
+            Unsupported();
+            return;
+        }
+
+        var corrected = calibration.Correct(new(raw.X, raw.Y), new(orientation.X, orientation.Y));
+        var result = new Vector2((float)corrected.X, (float)corrected.Y);
+        if (!PreviewGeometry.Finite(result))
+        {
+            Unsupported();
+            return;
+        }
+
+        position.Position = result; // Interface reference mutates the original box, including structs.
     }
 
     private void Unsupported()

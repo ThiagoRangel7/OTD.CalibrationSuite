@@ -79,14 +79,13 @@ public sealed class MainWindow : Window
         try
         {
             var value = settings.Read(readyTablet == null ? null : CaptureDevice.Geometry(readyTablet));
-            int poses = value.AzimuthCount == 0 || value.NonUprightAltitudeCount == 0 ? 1
-                : checked(1 + value.AzimuthCount * value.NonUprightAltitudeCount);
+            int poses = value.PoseCount;
             int count = value.TotalCaptures;
             total.Foreground = Ui.Ink;
             total.Text = $"{count} captures  ·  {value.RowCount} × {value.ColumnCount} targets  ·  {poses} poses each";
             start.IsEnabled = ready;
         }
-        catch (Exception ex) when (ex is CalibrationException or OverflowException)
+        catch (CalibrationException)
         { total.Foreground = Ui.Error; total.Text = "Check capture settings before starting."; }
         resume.Visibility = workspace.Session != null ? Visibility.Visible : Visibility.Collapsed;
         resume.IsEnabled = ready;
@@ -138,8 +137,10 @@ public sealed class MainWindow : Window
         if (newCapture && (workspace.Session != null || workspace.Candidate != null)
             && MessageBox.Show(this, "Start a new calibration and discard unaccepted measurements? Accepted data is preserved.",
                 "New calibration", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-        running = true; Refresh();
-        CaptureWindow? window = null; CaptureController? controller = null;
+        running = true;
+        Refresh();
+        CaptureWindow? window = null;
+        CaptureController? controller = null;
         bool complete = false;
         try
         {
@@ -154,19 +155,28 @@ public sealed class MainWindow : Window
             if (!draft.Complete)
             {
                 controller = new(draft, tilt => CaptureDevice.Orientation(tilt, draft.Settings.AngleToleranceDeg), CaptureDevice.ReportType);
-                acquisition = new(daemon, tablet); acquisition.Reading += controller.Read;
+                acquisition = new(daemon, tablet);
+                acquisition.Reading += controller.Read;
                 window = new(acquisition, controller, draft, tablet.Properties.Name, display) { Owner = this };
                 window.GeometryChanged += CancelForDisplayChange;
                 window.Show();
                 status.Text = await acquisition.RunAsync();
                 restartRequired = acquisition.RestartRequired;
             }
-            if (draft.Complete) { workspace.Finish(); complete = true; }
+            if (draft.Complete)
+            {
+                workspace.Finish();
+                complete = true;
+            }
         }
         catch (Exception ex) { status.Text = ex.Message; }
         finally
         {
-            window?.Close(); controller?.Stop(); acquisition = null; running = false; Refresh();
+            window?.Close();
+            controller?.Stop();
+            acquisition = null;
+            running = false;
+            Refresh();
             if (lifetime.IsCancellationRequested) Close();
         }
         if (complete && openReview && !lifetime.IsCancellationRequested) await ReviewAsync();
@@ -177,10 +187,12 @@ public sealed class MainWindow : Window
         while (!lifetime.IsCancellationRequested)
         {
             var window = new ReviewWindow(workspace) { Owner = this };
-            window.ShowDialog(); Refresh();
+            window.ShowDialog();
+            Refresh();
             if (window.RecaptureSource is not { } source) return;
             workspace.Recapture(source, window.RecaptureIndex, window.WholeNode);
-            Refresh(); await CaptureAsync(false, openReview: false);
+            Refresh();
+            await CaptureAsync(false, openReview: false);
             if (workspace.Session != null) return;
         }
     }
@@ -191,7 +203,13 @@ public sealed class MainWindow : Window
     {
         if (!closingAccepted && workspace.HasSessionData && MessageBox.Show(this, CalibrationWorkspace.CloseReminder,
             "Session measurements", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes)
-        { e.Cancel = true; return; }
-        closingAccepted = true; e.Cancel = running; lifetime.Cancel(); acquisition?.Cancel();
+        {
+            e.Cancel = true;
+            return;
+        }
+        closingAccepted = true;
+        e.Cancel = running;
+        lifetime.Cancel();
+        acquisition?.Cancel();
     }
 }

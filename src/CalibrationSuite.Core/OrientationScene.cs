@@ -24,8 +24,6 @@ public static class OrientationScene
 // the top view, rather than an enlarged decorative circle around an ideal pose.
 public readonly record struct OrientationTarget(double InnerRadius, double OuterRadius, double? AzimuthDeg, double ToleranceDeg);
 
-public readonly record struct OverlayPosition(double Left, double Top);
-
 public readonly record struct OverlayBounds(double Left, double Top, double Width, double Height)
 {
     public double DistanceTo(Point2 point)
@@ -48,25 +46,33 @@ public static class CaptureOverlay
     public static double Width(double viewportWidth, double margin) =>
         Math.Min(320, Math.Max(0, viewportWidth / 2 - margin - 80));
 
-    public static OverlayPosition Place(double width, double height, Point2 target, double panelWidth, double panelHeight, double margin) =>
-        Corners(width, height, panelWidth, panelHeight, margin)
-            .MaxBy(p => new OverlayBounds(p.Left, p.Top, panelWidth, panelHeight).DistanceTo(target));
-
-    public static OverlayPosition PlaceSecondary(double width, double height, Point2 target, OverlayBounds primary,
-        double panelWidth, double panelHeight, double margin) =>
-        Corners(width, height, panelWidth, panelHeight, margin)
-            .Where(p => !new OverlayBounds(p.Left, p.Top, panelWidth, panelHeight).Overlaps(primary, 8))
-            .MaxBy(p => new OverlayBounds(p.Left, p.Top, panelWidth, panelHeight).DistanceTo(target));
-
     // The guide stays anchored to the raw target. Only its scale changes to fit
     // the display and both cards; neither the target region nor its tolerance is inflated.
-    public static double GuidanceRadius(double width, double height, Point2 target, OverlayBounds primary, OverlayBounds secondary) =>
-        Math.Max(0, new[] { MaxGuidanceRadius, target.X - 5, width - target.X - 5, target.Y - 5, height - target.Y - 5,
-            primary.DistanceTo(target) - 12, secondary.DistanceTo(target) - 12 }.Min());
+    public static double GuidanceRadius(double width, double height, Point2 target, OverlayBounds primary, OverlayBounds secondary)
+    {
+        double radius = Math.Min(MaxGuidanceRadius, Math.Min(target.X - 5, width - target.X - 5));
+        radius = Math.Min(radius, Math.Min(target.Y - 5, height - target.Y - 5));
+        radius = Math.Min(radius, Math.Min(primary.DistanceTo(target) - 12, secondary.DistanceTo(target) - 12));
+        return Math.Max(0, radius);
+    }
 
-    private static OverlayPosition[] Corners(double width, double height, double panelWidth, double panelHeight, double margin)
+    public static OverlayBounds Place(double width, double height, Point2 target,
+        double panelWidth, double panelHeight, double margin, OverlayBounds? avoid = null)
     {
         double right = Math.Max(margin, width - panelWidth - margin), bottom = Math.Max(margin, height - panelHeight - margin);
-        return [new(margin, margin), new(right, margin), new(margin, bottom), new(right, bottom)];
+        var best = new OverlayBounds(0, 0, panelWidth, panelHeight);
+        double distance = double.NegativeInfinity;
+        ReadOnlySpan<Point2> corners = stackalloc Point2[]
+        { new(margin, margin), new(right, margin), new(margin, bottom), new(right, bottom) };
+        foreach (var corner in corners)
+        {
+            var bounds = new OverlayBounds(corner.X, corner.Y, panelWidth, panelHeight);
+            if (avoid is { } occupied && bounds.Overlaps(occupied, 8)) continue;
+            double nextDistance = bounds.DistanceTo(target);
+            if (nextDistance <= distance) continue;
+            best = bounds;
+            distance = nextDistance;
+        }
+        return best;
     }
 }

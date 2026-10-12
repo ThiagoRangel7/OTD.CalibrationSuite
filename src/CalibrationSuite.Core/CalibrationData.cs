@@ -25,7 +25,8 @@ public sealed record SourceGeometry(
 {
     public void Validate()
     {
-        if (!new[] { MaxX, MaxY, WidthMm, HeightMm }.All(v => double.IsFinite(v) && v > 0))
+        static bool Positive(double value) => double.IsFinite(value) && value > 0;
+        if (!Positive(MaxX) || !Positive(MaxY) || !Positive(WidthMm) || !Positive(HeightMm))
             throw new CalibrationException("Digitizer geometry must be finite and positive.");
     }
 
@@ -34,7 +35,7 @@ public sealed record SourceGeometry(
     private static bool Close(double a, double b) => Math.Abs(a - b) <= 1e-6 * Math.Max(Math.Abs(a), Math.Abs(b));
 }
 
-public sealed record RequestedPose([property: JsonRequired] double AltitudeDeg, double? AzimuthDeg = null);
+public readonly record struct RequestedPose([property: JsonRequired] double AltitudeDeg, double? AzimuthDeg = null);
 public sealed record CalibrationSample(
     [property: JsonRequired] Point2 Position, [property: JsonRequired] Point2 Tilt,
     RequestedPose? RequestedPose = null);

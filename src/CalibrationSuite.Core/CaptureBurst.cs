@@ -6,6 +6,7 @@ public enum CaptureBurstStatus { Idle, Capturing, Accepted, Retry }
 public sealed class CaptureBurst(CaptureSettings settings, SourceGeometry geometry, Func<Point2, RequestedPose> orientation)
 {
     private readonly List<(Point2 Position, Point2 Tilt)> samples = [];
+    private double[] scratch = [];
     private RequestedPose requested = new(90);
     private double started, first, last;
     public CaptureBurstStatus Status { get; private set; }
@@ -54,25 +55,39 @@ public sealed class CaptureBurst(CaptureSettings settings, SourceGeometry geomet
         samples.Add((position, tilt)); // Identical events still count.
         if (time - first < settings.CaptureWindowMs || samples.Count < settings.MinSamplesPerCapture) return null;
 
-        static double Median(IEnumerable<double> values)
-        {
-            var sorted = values.Order().ToArray();
-            int middle = sorted.Length / 2;
-            return sorted.Length % 2 == 1 ? sorted[middle] : sorted[middle - 1] / 2 + sorted[middle] / 2;
-        }
-        var p = new Point2(Median(samples.Select(s => s.Position.X)), Median(samples.Select(s => s.Position.Y)));
-        var t = new Point2(Median(samples.Select(s => s.Tilt.X)), Median(samples.Select(s => s.Tilt.Y)));
-        static double Length(Point2 v) => Math.Sqrt(Point2.Dot(v, v));
-        int rank = (int)Math.Ceiling(0.95 * samples.Count) - 1;
-        var position95 = samples.Select(s => Length(new((s.Position.X - p.X) * geometry.WidthMm / geometry.MaxX,
-            (s.Position.Y - p.Y) * geometry.HeightMm / geometry.MaxY))).Order().ElementAt(rank);
-        var tilt95 = samples.Select(s => Length(s.Tilt - t)).Order().ElementAt(rank);
-        if (position95 > settings.PositionStabilityMm || tilt95 > settings.TiltStabilityDeg)
+        // One reusable buffer serves all four medians and both percentiles.
+        // Sort a copy of each coordinate; every original report still contributes.
+        if (scratch.Length < samples.Count) scratch = new double[samples.Capacity];
+        var p = new Point2(Median(static s => s.Position.X), Median(static s => s.Position.Y));
+        var t = new Point2(Median(static s => s.Tilt.X), Median(static s => s.Tilt.Y));
+        double position95 = Deviation95(p, position: true), tilt95 = Deviation95(t, position: false);
+        if (!double.IsFinite(position95) || !double.IsFinite(tilt95)
+            || position95 > settings.PositionStabilityMm || tilt95 > settings.TiltStabilityDeg)
         {
             Cancel($"Movement too large (95% position {position95:F2} mm, tilt {tilt95:F2}°). Hold still and retry.", retry: true);
             return null;
         }
         Status = CaptureBurstStatus.Accepted; Message = "Captured.";
         return new(p, t, requested);
+    }
+
+    private double Median(Func<(Point2 Position, Point2 Tilt), double> coordinate)
+    {
+        for (int i = 0; i < samples.Count; i++) scratch[i] = coordinate(samples[i]);
+        Array.Sort(scratch, 0, samples.Count);
+        int middle = samples.Count / 2;
+        return samples.Count % 2 == 1 ? scratch[middle] : scratch[middle - 1] / 2 + scratch[middle] / 2;
+    }
+
+    private double Deviation95(Point2 median, bool position)
+    {
+        for (int i = 0; i < samples.Count; i++)
+        {
+            var delta = (position ? samples[i].Position : samples[i].Tilt) - median;
+            if (position) delta = new(delta.X * geometry.WidthMm / geometry.MaxX, delta.Y * geometry.HeightMm / geometry.MaxY);
+            scratch[i] = Math.Sqrt(Point2.Dot(delta, delta));
+        }
+        Array.Sort(scratch, 0, samples.Count);
+        return scratch[(int)Math.Ceiling(0.95 * samples.Count) - 1];
     }
 }

@@ -2,36 +2,45 @@ namespace CalibrationSuite.Core;
 
 public sealed class CaptureDraft
 {
+    private readonly CalibrationGrid grid;
     private readonly CalibrationSample?[] samples;
-    private readonly int[] itinerary;
+    private readonly int firstIndex, endIndex;
     private int cursor;
     public CaptureSettings Settings { get; }
     public SourceGeometry Geometry { get; }
-    public CalibrationGrid Grid { get; }
     public IReadOnlyList<RequestedPose> Poses { get; }
     public int Total => samples.Length;
-    public int CapturedCount => samples.Count(s => s != null);
-    public bool Complete => cursor == itinerary.Length;
-    public int CurrentIndex => itinerary[Math.Min(cursor, itinerary.Length - 1)];
+    public int CapturedCount { get; private set; }
+    public bool Complete => cursor == endIndex;
+    public int CurrentIndex => Math.Min(cursor, endIndex - 1);
     public RequestedPose CurrentPose => Poses[CurrentIndex % Poses.Count];
     public Point2 CurrentTarget => Target(CurrentIndex);
 
     public CaptureDraft(CaptureSettings settings, SourceGeometry geometry)
     {
-        Settings = settings; Geometry = geometry; Grid = settings.CreateGrid(geometry); Poses = settings.CreatePoses();
+        Settings = settings;
+        Geometry = geometry;
+        grid = settings.CreateGrid(geometry);
+        Poses = Array.AsReadOnly(settings.CreatePoses());
         samples = new CalibrationSample?[settings.TotalCaptures];
-        itinerary = Enumerable.Range(0, samples.Length).ToArray();
+        endIndex = samples.Length;
     }
 
-    private CaptureDraft(CaptureDraft source, int[] selected)
+    private CaptureDraft(CaptureDraft source, int firstIndex, int count)
     {
-        Settings = source.Settings; Geometry = source.Geometry; Grid = source.Grid; Poses = source.Poses;
-        samples = (CalibrationSample?[])source.samples.Clone(); itinerary = selected;
-        foreach (int i in selected) samples[i] = null;
+        Settings = source.Settings;
+        Geometry = source.Geometry;
+        grid = source.grid;
+        Poses = source.Poses;
+        samples = (CalibrationSample?[])source.samples.Clone();
+        this.firstIndex = firstIndex;
+        endIndex = firstIndex + count;
+        CapturedCount = source.CapturedCount;
+        Restart();
     }
 
-    public Point2 Target(int index) => new(Grid.PreTransformColumnCoordinates[index / Poses.Count % Settings.ColumnCount],
-        Grid.PreTransformRowCoordinates[index / Poses.Count / Settings.ColumnCount]);
+    public Point2 Target(int index) => new(grid.PreTransformColumnCoordinates[index / Poses.Count % Settings.ColumnCount],
+        grid.PreTransformRowCoordinates[index / Poses.Count / Settings.ColumnCount]);
     public CalibrationSample? Sample(int index) => samples[index];
 
     public CaptureDraft Recapture(int index, bool wholeNode)
@@ -39,82 +48,67 @@ public sealed class CaptureDraft
         if (!Complete) throw new CalibrationException("Complete this capture before targeted recapture; use Previous while capturing.");
         if ((uint)index >= samples.Length) throw new ArgumentOutOfRangeException(nameof(index));
         int start = wholeNode ? index / Poses.Count * Poses.Count : index;
-        return new(this, Enumerable.Range(start, wholeNode ? Poses.Count : 1).ToArray());
+        return new(this, start, wholeNode ? Poses.Count : 1);
     }
 
-    public void Previous() { if (cursor > 0) cursor--; }
+    public void Previous()
+    {
+        if (cursor > firstIndex) cursor--;
+    }
+
     public void Restart()
     {
-        foreach (int i in itinerary) samples[i] = null;
-        cursor = 0;
+        // Full capture and pose/node recapture each cover one contiguous range.
+        for (int i = firstIndex; i < endIndex; i++)
+        {
+            if (samples[i] == null) continue;
+            samples[i] = null;
+            CapturedCount--;
+        }
+        cursor = firstIndex;
     }
 
     public void Store(CalibrationSample sample)
     {
         if (Complete) throw new InvalidOperationException("Capture is already complete.");
-        int index = CurrentIndex, nodeStart = index / Poses.Count * Poses.Count;
-        var node = samples.Skip(nodeStart).Take(Poses.Count).ToArray();
-        node[index % Poses.Count] = null;
-        if (!NodeMesh.CanAddCapture(node.OfType<CalibrationSample>(), sample.Tilt))
-            throw new CalibrationException("Measured tilt is within 0.1° of another pose. Recapture with distinct orientations.");
+
+        int index = CurrentIndex;
+        int nodeStart = index / Poses.Count * Poses.Count;
+        int capturedInNode = 1;
+        for (int i = nodeStart; i < nodeStart + Poses.Count; i++)
+        {
+            if (i == index || samples[i] is not { } existing) continue;
+            if (!NodeMesh.CaptureTiltsSeparated(existing.Tilt, sample.Tilt))
+                throw new CalibrationException("Measured tilt is within 0.1° of another pose. Recapture with distinct orientations.");
+            capturedInNode++;
+        }
+
         sample = sample with { RequestedPose = CurrentPose };
-        node[index % Poses.Count] = sample;
-        if (node.All(s => s != null)) NodeMesh.CompleteCapture(node.OfType<CalibrationSample>().ToArray(), CurrentTarget, 0);
+        if (capturedInNode == Poses.Count)
+        {
+            var node = new CalibrationSample[Poses.Count];
+            Array.Copy(samples, nodeStart, node, 0, node.Length);
+            node[index % Poses.Count] = sample;
+            NodeMesh.Prepare(node, CurrentTarget, node[0].Tilt);
+        }
+
+        // Commit only after every validation succeeds; failed replacements preserve the old sample.
+        if (samples[index] == null) CapturedCount++;
         samples[index] = sample;
         cursor++;
     }
 
     public CalibrationData ToData()
     {
-        if (!Complete || samples.Any(s => s == null)) throw new CalibrationException("Capture every requested pose before accepting.");
-        var nodes = new CalibrationNode[Settings.RowCount][];
-        for (int row = 0; row < nodes.Length; row++)
+        if (!Complete) throw new CalibrationException("Capture every requested pose before accepting.");
+        return new CalibrationData
         {
-            nodes[row] = new CalibrationNode[Settings.ColumnCount];
-            for (int col = 0; col < nodes[row].Length; col++)
-            {
-                int start = (row * Settings.ColumnCount + col) * Poses.Count;
-                var node = samples.Skip(start).Take(Poses.Count).OfType<CalibrationSample>().ToArray();
-                NodeMesh.CompleteCapture(node, Target(start), 0);
-                nodes[row][col] = new(node);
-            }
-        }
-        var data = new CalibrationData { Mode = "measured", SourceGeometry = Geometry,
-            Grid = new((double[])Grid.PreTransformRowCoordinates.Clone(), (double[])Grid.PreTransformColumnCoordinates.Clone()), Nodes = nodes };
-        _ = PreparedCalibration.Prepare(data, Geometry);
-        return data;
+            Mode = "measured",
+            SourceGeometry = Geometry,
+            Grid = new((double[])grid.PreTransformRowCoordinates.Clone(), (double[])grid.PreTransformColumnCoordinates.Clone()),
+            Nodes = samples.Cast<CalibrationSample>()
+                .Chunk(Poses.Count).Select(node => new CalibrationNode(node))
+                .Chunk(Settings.ColumnCount).ToArray()
+        };
     }
-}
-
-// This state belongs to one app lifetime. OTD alone owns durable storage.
-public sealed class CalibrationWorkspace
-{
-    public CaptureDraft? Session { get; private set; }
-    public CaptureDraft? Candidate { get; private set; }
-    public CaptureDraft? Working { get; private set; }
-    public bool HasSessionData => Session != null || Candidate != null || Working != null;
-    public const string CopyReminder = "Paste into the intended OTD profile's Calibration data field and Save. Copying does not apply or save it in OTD.";
-    public const string CloseReminder = "Closing loses all measurements in this app session. Accepted calibration is only durable after you paste it into OTD and Save. Close anyway?";
-
-    public void Begin(CaptureSettings settings, SourceGeometry geometry)
-    {
-        var draft = new CaptureDraft(settings, geometry);
-        Session = draft; Candidate = null;
-    }
-    public void Recapture(CaptureDraft source, int index, bool wholeNode) => Session = source.Recapture(index, wholeNode);
-    public void Finish()
-    {
-        if (Session == null) throw new InvalidOperationException("No unfinished capture.");
-        _ = Session.ToData();
-        Candidate = Session; Session = null;
-    }
-    public void Accept()
-    {
-        if (Session != null) throw new InvalidOperationException("Finish or discard the unfinished capture before acceptance.");
-        if (Candidate == null) throw new InvalidOperationException("No candidate to accept.");
-        _ = Candidate.ToData();
-        Working = Candidate; Candidate = null; Session = null;
-    }
-    public void Discard() { Session = null; Candidate = null; }
-    public string CopyPayload() => Working?.ToData().ToJson() ?? throw new InvalidOperationException("Accept a calibration before copying.");
 }

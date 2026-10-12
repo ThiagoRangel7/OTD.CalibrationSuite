@@ -43,10 +43,11 @@ public class IntegrationTests
         var a = Tablet();
         var b = JsonConvert.DeserializeObject<TabletReference>(JsonConvert.SerializeObject(a))!;
         Assert.NotSame(a, b);
-        Assert.True(TabletSelection.Same(a, b));
+        var matches = TabletSelection.CreateMatcher(a);
+        Assert.True(matches(b));
         Assert.Throws<InvalidOperationException>(() => TabletSelection.Single([a, b]));
         b.Identifiers.First().ProductID++;
-        Assert.False(TabletSelection.Same(a, b));
+        Assert.False(matches(b));
         Assert.Same(a, TabletSelection.Single([a]));
         Assert.Throws<InvalidOperationException>(() => TabletSelection.Single([]));
     }
@@ -104,19 +105,9 @@ public class IntegrationTests
         Assert.Equal(Vector2.Zero, PreviewGeometry.ToDisplay(Vector2.Zero, rawSize, viewport));
         Assert.Equal(viewport, PreviewGeometry.ToDisplay(rawSize, rawSize, viewport));
         Assert.Equal(viewport / 2, PreviewGeometry.ToDisplay(rawSize / 2, rawSize, viewport));
-        var targets = PreviewGeometry.Targets(200, 100, rawSize.X, rawSize.Y);
-        Assert.Equal(new Vector2(1500, 1500), targets[0]);
-        Assert.Equal(new Vector2(18500, 8500), targets[8]);
-        var inset = PreviewGeometry.ToDisplay(targets[0], rawSize, viewport);
+        var inset = PreviewGeometry.ToDisplay(new(1500, 1500), rawSize, viewport);
         Assert.Equal(viewport.X * 0.075f, inset.X, 3);
         Assert.Equal(viewport.Y * 0.15f, inset.Y, 3);
     }
 
-    [Fact]
-    public void InvalidDigitizerGeometryCannotStartPreview()
-    {
-        Assert.Throws<CalibrationException>(() => PreviewGeometry.Targets(30, 100, 1000, 1000));
-        Assert.Throws<CalibrationException>(() => PreviewGeometry.Targets(200, 100, 0, 1000));
-        Assert.Throws<CalibrationException>(() => PreviewGeometry.Targets(float.NaN, 100, 1000, 1000));
-    }
 }

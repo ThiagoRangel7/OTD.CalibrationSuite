@@ -43,7 +43,7 @@ public class RpcTests
         Assert.Contains(AppInfo.PluginManager.PluginTypes, t => t.FullName == typeof(TiltTabletReport).FullName);
         var tablet = Assert.Single(await connection.GetTablets());
         Assert.NotSame(synthetic.Tablet, tablet);
-        Assert.True(TabletSelection.Same(synthetic.Tablet, tablet));
+        Assert.True(TabletSelection.CreateMatcher(synthetic.Tablet)(tablet));
 
         var received = new TaskCompletionSource<ReportReading>(TaskCreationOptions.RunContinuationsAsynchronously);
         connection.DeviceReport += (_, data) => received.TrySetResult(ReportReadingFactory.Read(data, 99));

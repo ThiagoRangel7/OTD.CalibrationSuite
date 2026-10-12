@@ -5,8 +5,19 @@
   <ItemGroup>
     <ProjectReference Include="../CalibrationSuite.Core/CalibrationSuite.Core.csproj" />
     <PackageReference Include="OpenTabletDriver.Plugin" Version="0.6.7" ExcludeAssets="runtime" />
+    <FilterPackageInput Include="$(MSBuildProjectDirectory)/bin/$(Configuration)/$(TargetFramework)/CalibrationSuite.Filter.dll" />
+    <FilterPackageInput Include="$(MSBuildProjectDirectory)/bin/$(Configuration)/$(TargetFramework)/CalibrationSuite.Core.dll" />
+    <FilterPackageInput Include="$(MSBuildProjectDirectory)/bin/$(Configuration)/$(TargetFramework)/NetTopologySuite.dll" />
+    <FilterPackageInput Include="$(MSBuildProjectDirectory)/bin/$(Configuration)/$(TargetFramework)/CalibrationSuite.Filter.pdb" Condition="'$(Configuration)' == 'Debug'" />
+    <FilterPackageInput Include="$(MSBuildProjectDirectory)/bin/$(Configuration)/$(TargetFramework)/CalibrationSuite.Core.pdb" Condition="'$(Configuration)' == 'Debug'" />
+    <FilterPackageInput Include="$(MSBuildProjectDirectory)/../../packaging/metadata.json" />
+    <FilterPackageInput Include="$(MSBuildProjectDirectory)/../../packaging/NOTICE.txt" />
+    <FilterPackageInput Include="$(MSBuildProjectDirectory)/../../packaging/NetTopologySuite.LICENSE.md" />
+    <FilterPackageInput Include="$(MSBuildProjectDirectory)/../../scripts/Package-Filter.ps1" />
+    <FilterPackageInput Include="$(MSBuildProjectFullPath)" />
   </ItemGroup>
-  <Target Name="PackageFilter" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'">
+  <Target Name="PackageFilter" AfterTargets="Build" Condition="'$(DesignTimeBuild)' != 'true'"
+          Inputs="@(FilterPackageInput)" Outputs="$(MSBuildProjectDirectory)/../../artifacts/filter-package/$(Configuration)/CalibrationSuite.zip">
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)/../../scripts/Package-Filter.ps1&quot; -Configuration $(Configuration)" />
   </Target>
 </Project>

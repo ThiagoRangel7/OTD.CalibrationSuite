@@ -12,7 +12,7 @@ public class InterpolationTests
         Point2 target = new(300, 500);
         Point2[] tilts = [new(-40, -40), new(-40, 40), new(1, 2), new(40, -40), new(40, 40), new(0, -40)];
         var samples = Samples(target, t => new(t.X * t.X / 10 + 9, t.Y * 2 - 3), tilts);
-        var mesh = NodeMesh.CompleteCapture(samples, target, 2);
+        var mesh = NodeMesh.Prepare(samples, target, samples[2].Tilt);
         foreach (var sample in samples) Near(sample.Position - target, mesh.Evaluate(sample.Tilt));
         Near(new(9.1, 1), mesh.Evaluate(new(1, 2)));
     }
@@ -43,6 +43,15 @@ public class InterpolationTests
         Point2[] tilts = [new(40, 0), new(0, 40), new(-40, 0), new(0, -40)];
         var mesh = NodeMesh.Prepare(Samples(default, t => t, tilts), default);
         Near(new(20, 20), mesh.Evaluate(new(28, 28)));
+    }
+
+    [Fact]
+    public void ObliqueHullProjectionInterpolatesTheMeasuredEdgeErrors()
+    {
+        Point2[] tilts = [new(-30, -10), new(10, -30), new(30, 10), new(-10, 30), default];
+        var mesh = NodeMesh.Prepare(Samples(default, t => new(t.X * t.X, t.Y * t.Y), tilts), default);
+        // (35,-5) projects to (25,0), 3/4 along (10,-30) -> (30,10).
+        Near(new(700, 300), mesh.Evaluate(new(35, -5)));
     }
 
     [Fact]
@@ -101,12 +110,9 @@ public class InterpolationTests
         Point2[] ring = [new(-40, -40), new(-40, 40), new(40, -40), new(40, 40)];
         var samples = Samples(default, t => t, ring);
         Near(default, NodeMesh.Prepare(samples, default).Evaluate(default));
-        Assert.Throws<CalibrationException>(() => NodeMesh.CompleteCapture(samples, default, 0));
+        Assert.Throws<CalibrationException>(() => NodeMesh.Prepare(samples, default, samples[0].Tilt));
         var close = Samples(default, t => t, [.. Tilts, new(0.05, 0)]);
         _ = NodeMesh.Prepare(close, default);
-        Assert.Contains("within 0.1", Assert.Throws<CalibrationException>(() => NodeMesh.CompleteCapture(close, default, 2)).Message);
-        Assert.False(NodeMesh.CanAddCapture([new(default, default)], new(0.06, 0.08)));
-        Assert.True(NodeMesh.CanAddCapture([new(default, default)], new(0.101, 0)));
     }
 
     [Fact]

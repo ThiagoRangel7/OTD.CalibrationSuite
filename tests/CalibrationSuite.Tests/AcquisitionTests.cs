@@ -220,6 +220,29 @@ public class AcquisitionTests
     }
 
     [Fact]
+    public async Task ReportsWithDifferentTabletContentsNeverReachCapture()
+    {
+        var daemon = new FakeDaemon();
+        var session = Session(daemon);
+        var received = new TaskCompletionSource<ReportReading>(TaskCreationOptions.RunContinuationsAsynchronously);
+        int count = 0;
+        session.Reading += reading => { count++; received.TrySetResult(reading); };
+        var run = session.RunAsync();
+        try
+        {
+            await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            var other = IntegrationTests.Tablet();
+            other.Properties.Specifications.Pen.MaxPressure = 8192;
+            daemon.Send(IntegrationTests.Report(other));
+            daemon.Send();
+            await received.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        }
+        finally { session.Cancel(); await run.WaitAsync(TimeSpan.FromSeconds(3)); }
+        Assert.Equal(1, count);
+        Assert.Equal(321u, (await received.Task).Pressure);
+    }
+
+    [Fact]
     public async Task BlockedParserCannotPreventDebugCleanup()
     {
         var daemon = new FakeDaemon();

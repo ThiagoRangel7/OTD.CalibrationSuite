@@ -12,7 +12,10 @@ public static class TabletSelection
         _ => throw new InvalidOperationException("Connect only the display tablet being calibrated; disconnect other tablets.")
     };
 
-    // RPC reconstructs references; object identity cannot identify the selected input.
-    public static bool Same(TabletReference? a, TabletReference? b) => a != null && b != null
-        && JToken.DeepEquals(JToken.FromObject(a), JToken.FromObject(b));
+    // Use OTD's serialized contract, including dictionary contents and ordered lists.
+    public static Func<TabletReference?, bool> CreateMatcher(TabletReference tablet)
+    {
+        var expected = JToken.FromObject(tablet);
+        return incoming => incoming != null && JToken.DeepEquals(expected, JToken.FromObject(incoming));
+    }
 }
