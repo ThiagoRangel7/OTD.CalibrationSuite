@@ -3,11 +3,11 @@ namespace CalibrationSuite.Core;
 public enum CaptureBurstStatus { Idle, Capturing, Accepted, Retry }
 
 // Driven by monotonic ingress times, in milliseconds. The caller serializes commands/reports.
-public sealed class CaptureBurst(CaptureSettings settings, SourceGeometry geometry, Func<Point2, RequestedPose> orientation)
+public sealed class CaptureBurst(CaptureSettings settings, SourceGeometry geometry)
 {
     private readonly List<(Point2 Position, Point2 Tilt)> samples = [];
     private double[] scratch = [];
-    private RequestedPose requested = new(90);
+    private Point2? requested;
     private double started, first, last;
     public CaptureBurstStatus Status { get; private set; }
     public bool Active => Status == CaptureBurstStatus.Capturing;
@@ -16,10 +16,10 @@ public sealed class CaptureBurst(CaptureSettings settings, SourceGeometry geomet
     public double Progress => Math.Min(1, Math.Min((double)Count / settings.MinSamplesPerCapture, DurationMs / settings.CaptureWindowMs));
     public string Message { get; private set; } = "Aim with the physical nib, hold the requested pose, then press Space.";
 
-    public bool Start(RequestedPose pose, double now)
+    public bool Start(Point2? tiltTarget, double now)
     {
         if (Active) return false;
-        requested = pose; started = first = last = now; samples.Clear(); Status = CaptureBurstStatus.Capturing;
+        requested = tiltTarget; started = first = last = now; samples.Clear(); Status = CaptureBurstStatus.Capturing;
         Message = "Capturing — hold still.";
         return true;
     }
@@ -45,11 +45,8 @@ public sealed class CaptureBurst(CaptureSettings settings, SourceGeometry geomet
         CheckTimeout(time);
         if (!Active) return null;
         if (!position.IsFinite || !tilt.IsFinite) { Cancel("Nonfinite pen reading — retry.", retry: true); return null; }
-        RequestedPose current;
-        try { current = orientation(tilt); }
-        catch (CalibrationException ex) { Cancel(ex.Message, retry: true); return null; }
-        if (!OrientationGuidance.WithinTolerance(current, requested, settings.AngleToleranceDeg))
-        { Cancel("Pose left the angle tolerance — hold the requested pose and retry.", retry: true); return null; }
+        if (requested is { } target && !OrientationGuidance.WithinTolerance(tilt, target, settings.TiltTolerance))
+        { Cancel("Pose left the tilt tolerance — hold the requested pose and retry.", retry: true); return null; }
         if (samples.Count == 0) first = time;
         last = time;
         samples.Add((position, tilt)); // Identical events still count.
@@ -62,13 +59,13 @@ public sealed class CaptureBurst(CaptureSettings settings, SourceGeometry geomet
         var t = new Point2(Median(static s => s.Tilt.X), Median(static s => s.Tilt.Y));
         double position95 = Deviation95(p, position: true), tilt95 = Deviation95(t, position: false);
         if (!double.IsFinite(position95) || !double.IsFinite(tilt95)
-            || position95 > settings.PositionStabilityMm || tilt95 > settings.TiltStabilityDeg)
+            || position95 > settings.PositionStabilityMm || tilt95 > settings.TiltStability)
         {
-            Cancel($"Movement too large (95% position {position95:F2} mm, tilt {tilt95:F2}°). Hold still and retry.", retry: true);
+            Cancel($"Movement too large (95% position {position95:F2} mm, tilt {tilt95:F2} reported units). Hold still and retry.", retry: true);
             return null;
         }
         Status = CaptureBurstStatus.Accepted; Message = "Captured.";
-        return new(p, t, requested);
+        return new(p, t);
     }
 
     private double Median(Func<(Point2 Position, Point2 Tilt), double> coordinate)

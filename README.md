@@ -1,10 +1,10 @@
-# Calibration Suite
+# Calibration Suite for OpenTabletDriver
 
-A Windows calibrator for **display tablets**, using raw pen position and tilt from OTD 0.6.7. The app guides full-screen measurement capture, reviews and recaptures measurements, and copies accepted calibration into OTD. The OTD filter applies the shared measured correction evaluator.
+A Windows calibrator for **display tablets**, using raw pen position and optional reported tilt from OTD 0.6.7. The app guides full-screen measurement capture, reviews and recaptures measurements, and copies accepted calibration into OTD. The OTD filter applies the shared measured correction evaluator.
 
 This project has not been released. Earlier designs are iterations toward the first release, not supported data versions. Calibration data follows only the current structure, with no version tags, migrations, or backward-compatibility code. Development changes may require new calibration data.
 
-Milestone 5's visual interface is implemented and awaiting user review: grouped visible settings, shorter instructions, thin arrow/target guidance, readiness colors and capture feedback at the physical crosshair, and compact secondary readings. See [verification and device review](docs/MILESTONE5.md). Final audit and delivery are milestone 6; physical capture/correction checks remain pending.
+Capture supports OTD absolute pen reports with or without tilt. Support derives from OTD's report interfaces and digitizer geometry, without a tablet-model catalog or device-specific settings. Guidance uses reported coordinates. See [current scope and release verification](docs/RELEASE.md).
 
 ## Run
 
@@ -14,25 +14,21 @@ Start OTD with only the tablet being calibrated connected. From this repository:
 dotnet run --project src/CalibrationSuite.Calibrator -c Release --no-build --no-restore
 ~~~
 
-The app connects automatically. Move its normal window onto the tablet screen, choose capture settings, and press **Calibrate**. All inputs stay visible in **Target grid**, **Pen poses**, **Sampling**, and **Quality limits**; smaller windows scroll. The default is 3 × 3 targets with 17 poses each (153 captures). Set **Azimuth directions** or **Non-upright levels** to 0 for upright-only calibration. A small 2 × 2 upright-only layout is useful for the first workflow check. Settings live only in this app session; invalid settings are explained beside their input rather than adjusted silently.
+The app connects automatically. Move its normal window onto the tablet screen, choose capture settings, and press **Calibrate**. All inputs stay visible in **Target grid**, **Reported tilt**, **Sampling**, and **Quality limits**; smaller windows scroll. The default is 3 × 3 targets with up to 17 poses each (153 captures). When the first eligible pen report has no OTD `ITiltReport`, tilt calibration is blocked for that session and the screen switches to **upright positions only**: one sample per target (9 captures). Hold the pen upright at every crosshair. Tilt is not measured in this mode, so the app cannot verify that posture or compensate for orientation-dependent error.
 
-The starting capture limits are **±8° angle tolerance**, a **200 ms burst** with at least **20 reports**, **0.5 mm position stability**, and **3° tilt stability**. These allow more room to reach and hold a pose; tighten them later if your device and hand can reliably meet stricter limits. Stability measures the 95th-percentile deviation from the burst median. Every report must still meet the pose tolerance.
+OTD's tablet metadata has no reliable tilt-capability flag. The app checks reports during capture, without model-specific guesses or interpreting zero tilt as missing support. If a device exposes tilt that does not respond usefully to pen movement, set **Tilt directions** or **Tilt levels** to 0 to choose upright position-only capture yourself.
 
-Capture currently supports the **Huion Kamvas 13 (Gen 3)** with OTD's Giano parser, using the cardinal directions you verified. Known physical angle scale, diagonal conversion, and reachable poses still need the [milestone 4 device review](docs/MILESTONE4.md). Other tablet/parser combinations are unavailable for capture until their orientation semantics are verified. This limit applies to capture guidance, not the filter's raw-tilt interpolation.
+The starting limits are **8 reported units of tilt tolerance**, a **200 ms burst** with at least **20 reports**, **0.5 mm position stability**, and **3 reported units of tilt stability**. Stability measures the 95th-percentile deviation from the burst median. Tilt range and tolerance use the device's reported coordinates; they do not claim physical pen angles.
 
+At each target, the first stable pose establishes a reported-tilt reference. Later targets spread around that value. Hold a comfortable central pose for the reference; reduce **Tilt range** if targets are hard to reach. Neither the reference nor the coverage hull needs to contain raw (0, 0). Stored tilt retains actual measurements when reported, never a snapped target. Missing tilt uses an unused zero placeholder in position-only data.
 Use the keyboard in the opaque full-screen window:
 
-- **Space:** hold the physical nib on the crosshair in the requested pose and capture one burst. Every report must meet the angle tolerance; the burst must meet both duration and sample minima and the position/tilt stability limits. Pressure does not trigger capture.
+- **Space:** hold the physical nib on the crosshair in the requested pose and capture one burst. Every tilted-pose report must meet the reported-tilt tolerance; the burst must meet both duration and sample minima and the position/tilt stability limits. Pressure does not trigger capture.
 - **Backspace:** revisit the previous pose, including across targets.
 - **R:** restart the unfinished capture; during targeted recapture, restart only that selection.
 - **Esc:** cancel the active burst and return to the main screen. Completed measurements remain available through **Resume Capture** or **Review Calibration**.
 
-At each target, capture upright, then all altitude levels for the first azimuth, all levels for the next azimuth, and so on. Azimuth describes the eraser direction: 0° left, 90° down, 180° right, 270° up. Altitude is 90° upright. **Minimum altitude** 50° allows at most 40° of lean. Live readings use the latest report; stored measurements use burst medians.
-
-Place the physical nib on the small open white crosshair center. The thin cyan arrow starts there and follows the pen's tilt, continuing **beyond the nib**, opposite the eraser direction. Put its tip inside the unfilled tolerance outline. Upright uses a small circle around the nib; tilted poses use a curved region offset from it.
-
-Follow the feedback at the crosshair: **amber** means adjust; **green arms with small end caps and a green target** mean pose ready — press Space. **Cyan arms and the growing arc around the nib** mean capture is in progress. A nearby **✓ Captured** identifies the completed target/pose. **↻** and a dashed target indicate retry; returning to a valid pose turns them green and shows **Ready to retry**. **Gray dotted arms and …** mean waiting for the pen. The short action or retry reason stays beside the nib, clear of the arrow and target outline. Overall progress, numeric angles, raw readings, burst counts, and static keyboard hints stay in the corner cards for inspection between attempts. Capture gates and the reported upright reference are unchanged.
-
+The thin cyan arrow at the crosshair plots the current reported tilt relative to that target's reference (X right, Y up). Place its tip inside the unfilled target circle. For the reference, hold a comfortable pose; for position-only captures, hold upright. Aim with the nib and hold still. The small open white nib marker and state-colored crosshair remain precise. Green means ready, cyan means capturing, gray means waiting; progress and retry/success cues stay beside the crosshair. Raw readings remain in the corner cards.
 Lifting the pen between bursts preserves progress. A gap, pose failure, or excessive movement rejects only that attempt with a retry reason. Disconnects, geometry/DPI changes, overflow, or blocked processing end acquisition; resume with fresh geometry when ready. If debug cleanup is unconfirmed, restart OTD and Calibrator first. Close OTD's tablet debugger before capture; concurrent debugger use is unsupported.
 
 Completion opens **Review Calibration**. Inspect requested poses, measured positions/tilts, and raw errors. Select a row for **Recapture Pose** or **Recapture Node**, **Discard Unaccepted Data**, or **Accept Calibration**. Acceptance replaces only the in-memory working calibration. New captures, retries, and discards preserve accepted data until another candidate is accepted.
@@ -82,7 +78,7 @@ dotnet test tests/CalibrationSuite.Tests/CalibrationSuite.Tests.csproj -c Debug 
 dotnet build CalibrationSuite.slnx -c Release
 ~~~
 
-Keep the Calibrator's complete **src/CalibrationSuite.Calibrator/bin/Release/net8.0-windows** folder together, including DLLs and notices. The user needs a running compatible OTD 0.6.7 daemon, but never source code or build tools. Runtime dependency redistribution review remains part of milestone 6; this is a development output, not a published release.
+Build distributable archives with **scripts/Package-Release.ps1**. It produces the plugin ZIP, a separate Windows x64 Calibrator ZIP, corresponding source/build inputs, registry metadata, and checksums under **artifacts/releases/0.1.0.0**. See [release preparation and installation](docs/RELEASE.md).
 
 The source revision and archive checksum are in **dependencies/otd/source.json**. OTD project definitions and package locks are committed there so editors can load all ten projects before the source download. Source files are unmodified and cached under **artifacts/otd-source**; NuGet packages are under **artifacts/packages**. The filter uses the official OTD Plugin package. See [dependency maintenance](docs/DEPENDENCIES.md) and [build workflow verification](docs/BUILD-WORKFLOW.md).
 
@@ -98,11 +94,11 @@ Remove-Item Env:CALIBRATION_LIVE_OTD
 
 In OTD 0.6.7, open **Plugins → Plugin Manager**, choose **Install plugin...** (or drag the ZIP into that window), and select `artifacts/filter-package/Release/CalibrationSuite.zip`. Keep the stable ZIP filename when updating. The package includes the filter, shared core, NetTopologySuite, metadata, and notices; it does not replace OTD assemblies. Update/removal use the same Plugin Manager.
 
-In the intended tablet profile's **Filters** tab, add **Calibration Suite** and keep exactly one enabled entry. It runs at **PreTransform** and must receive unchanged parsed position and tilt: position/tilt-changing filters must not precede it. Configure ordering in OTD; the Calibrator does not inspect it. Same-name tablets share an OTD profile, so confirm the destination tablet and pen yourself.
+In the intended tablet profile's **Filters** tab, add **Calibration Suite** and keep exactly one enabled entry. It runs at **PreTransform** and must receive unchanged parsed position and, for tilt-dependent data, tilt: position/tilt-changing filters must not precede it. Configure ordering in OTD; the Calibrator does not inspect it. Same-name tablets share an OTD profile, so confirm the destination tablet and pen yourself.
 
-For initial installation review, use **Calibration data** empty (identity). Verify its paste/Save/clear tooltip, enable/bypass, **Apply**, and **Save**. Save persists and applies; Apply alone does not prove a disk save. Clear the property and Save to reset; disable the checkbox to bypass while retaining data. Do not paste fictional measurements from the specification or tests onto real hardware. Then capture your own measurements and check actual correction as described in docs/MILESTONE4.md.
+For initial installation review, use **Calibration data** empty (identity). Verify its paste/Save/clear tooltip, enable/bypass, **Apply**, and **Save**. Save persists and applies; Apply alone does not prove a disk save. Clear the property and Save to reset; disable the checkbox to bypass while retaining data. Do not paste fictional measurements from the specification or tests onto real hardware. Then capture your own measurements and check enabled/bypassed correction using the short checklist in docs/RELEASE.md.
 
-Paste accepted Calibrator data into **Calibration data** and Save. OTD settings and presets retain this string; no separate calibration file is needed. Invalid data or geometry mismatch uses identity and reports the reason in OTD logs. Repeated unsupported pen input produces one warning per activation; missing tilt is never treated as upright, and eraser/out-of-proximity reports pass unchanged. See [milestone 3 review checks](docs/MILESTONE3.md).
+Paste accepted Calibrator data into **Calibration data** and Save. OTD settings and presets retain this string; no separate calibration file is needed. Invalid data or geometry mismatch uses identity and reports the reason in OTD logs. Repeated unsupported pen input produces one warning per activation; tilt-dependent data passes missing-tilt reports unchanged; position-only data corrects them, and eraser/out-of-proximity reports pass unchanged. See [milestone 3 review checks](docs/MILESTONE3.md).
 
 An optional read-only installed-daemon check (no settings reads or debug enablement):
 
@@ -120,9 +116,9 @@ Start with [milestone 2 examples and checks](docs/MILESTONE2.md). The core has n
 
 Capture drafts own their grid/poses, and targeted recapture copies the measurements. Accepted JSON is cached as a snapshot. Settings and reports are validated when they enter the workflow; each completed node is checked once. The main window coordinates acquisition directly, while capture views render snapshots and send commands.
 
-The core also supports upright-only calibration: zero azimuths or zero non-upright levels produces one pose per target. A single sample supplies a constant error at that target, blended across the screen using the same formula. The capture settings expose this option.
+Position-only calibration stores one measured error per grid target and blends across the screen using the same spatial formula. It works on tablets without tilt and can also be selected on tilt-capable tablets.
 
-The automated suite covers these mathematical and data rules using fictional measurements. It does not establish physical accuracy. Capture and review checks are described in docs/MILESTONE4.md.
+The automated suite covers these mathematical and data rules using fictional measurements. It does not establish physical accuracy. The current functional workflow checklist is in docs/RELEASE.md.
 
 The offscreen WPF verifier renders setup, all capture states/directions, and review without connecting to OTD or opening capture windows:
 
@@ -143,3 +139,7 @@ The runner measures tablet comparison, large-session progress reads, correction 
 ## Calibration workflow
 
 Open → move to tablet screen → calibrate → review/accept → copy → paste into the intended OTD filter profile and Save. The Calibrator retains measurements only during the current app session. It does not load prior OTD calibration, compare applied settings, or manage profiles. OTD owns durable storage and filter configuration.
+
+## License
+
+Calibration Suite's own code is [MIT licensed](LICENSE). OpenTabletDriver-derived build inputs and distributed components retain their existing licenses. The release archives include third-party notices and the corresponding OTD source/build inputs.

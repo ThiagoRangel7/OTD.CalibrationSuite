@@ -1,5 +1,7 @@
 # Milestone 5 — visual guidance and UI usability
 
+> Historical milestone. Its physical-angle guidance and model restriction were superseded by the reported-coordinate workflow; see [current scope and verification](RELEASE.md).
+
 **Status: implemented; awaiting review of the 2026-10-12 crosshair feedback and capture defaults.** Implemented following the 2026-10-04 request, on top of milestone 4's `2ec8a32` checkpoint. The user requested precise guidance and capture-time feedback at the aiming crosshair, then reported that the poses were too difficult to hit with the starting limits. Local feedback and more forgiving defaults are implemented. Automated and offscreen visual checks passed; physical capture usability, the reported upright discrepancy, and angle/correction checks remain pending.
 
 ## Implemented presentation

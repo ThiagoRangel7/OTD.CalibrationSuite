@@ -10,6 +10,10 @@
     </AssemblyAttribute>
     <None Remove="../README.md" />
   </ItemGroup>
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'OpenTabletDriver.Desktop'">
+    <!-- Patch the RPC dependency without changing the pinned upstream source/projects. -->
+    <PackageReference Include="MessagePack" Version="2.5.301" />
+  </ItemGroup>
   <Target Name="PrepareOtdSource" BeforeTargets="PrepareForBuild" Condition="'$(DesignTimeBuild)' != 'true'">
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(RepositoryRoot)scripts/Prepare-Otd.ps1&quot;" />
   </Target>

@@ -1,7 +1,11 @@
 {
-  "Name": "Calibration Suite",
-  "Description": "Measured position and tilt correction for display tablets. Development package; capture UI is not yet available.",
-  "PluginVersion": "0.1.0",
+  "Name": "CalibrationSuite",
+  "Owner": "ThiagoRangel7",
+  "Description": "Measured position and optional tilt correction for display tablets. Capture calibration with the separate Windows Calibrator.",
+  "PluginVersion": "0.1.0.0",
   "SupportedDriverVersion": "0.6.7.0",
-  "MaxSupportedDriverVersion": "0.6.7.0"
+  "RepositoryUrl": "https://github.com/ThiagoRangel7/OTD.CalibrationSuite",
+  "WikiUrl": "https://github.com/ThiagoRangel7/OTD.CalibrationSuite/blob/main/README.md",
+  "CompressionFormat": "zip",
+  "LicenseIdentifier": "MIT"
 }

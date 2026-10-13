@@ -12,7 +12,6 @@ public sealed class CaptureView : Grid
 {
     private readonly CaptureSettings settings;
     private readonly SourceGeometry geometry;
-    private readonly int poseCount;
     private readonly Canvas canvas = new();
     private readonly Border hud;
     private readonly Border details;
@@ -41,7 +40,7 @@ public sealed class CaptureView : Grid
 
     public CaptureView(CaptureSettings settings, SourceGeometry geometry, string tabletName)
     {
-        this.settings = settings; this.geometry = geometry; poseCount = settings.PoseCount;
+        this.settings = settings; this.geometry = geometry;
         Background = Ui.Brush("#101A28"); IsHitTestVisible = false;
         Children.Add(canvas); canvas.Children.Add(guide);
         var summary = new StackPanel();
@@ -81,18 +80,9 @@ public sealed class CaptureView : Grid
     public void Update(CaptureProgress state, ReportReading? latest, double now)
     {
         snapshot = state;
-        RequestedPose? livePose = null;
-        string? unavailable = latest?.Status;
-        if (latest is { Kind: ReadingKind.Paired, Tilt: { } tilt } && latest.ReportType == CaptureDevice.ReportType)
-        {
-            try { livePose = CaptureDevice.Orientation(new(tilt.X, tilt.Y), 0); }
-            catch (CalibrationException ex) { unavailable = ex.Message; }
-        }
-        else if (latest is { Kind: ReadingKind.Paired }) unavailable = "Orientation is unverified for this report";
-        // Calculate direction once; only the gate/display suppresses near-upright azimuth.
-        var pose = livePose is { } live && 90 - live.AltitudeDeg <= settings.AngleToleranceDeg
-            ? live with { AzimuthDeg = null } : livePose;
-        var cue = CaptureFeedback.Resolve(state, pose, settings.AngleToleranceDeg, now, unavailable);
+        Point2? tilt = latest is { Kind: ReadingKind.Paired, Tilt: { } t } ? new(t.X, t.Y) : null;
+        int poseCount = state.Total / (settings.RowCount * settings.ColumnCount);
+        var cue = CaptureFeedback.Resolve(state, latest, settings.TiltTolerance, now);
         var color = Ui.Brush(cue.Cue switch
         {
             CaptureCue.Ready => "#76E7C2",
@@ -107,17 +97,19 @@ public sealed class CaptureView : Grid
             hint.Text = $"Target {acceptedIndex / poseCount + 1} · pose {acceptedIndex % poseCount + 1} captured";
         address.Text = $"Target {state.Index / poseCount + 1} / {settings.RowCount * settings.ColumnCount} · Pose {state.Index % poseCount + 1} / {poseCount}";
         count.Text = $"{state.Captured} / {state.Total} measurements"; overall.Maximum = state.Total; overall.Value = state.Captured;
-        requested.Text = "Requested: " + CompactPose(state.Pose); current.Text = "Current: " + (pose is { } angles ? CompactPose(angles) : "—");
+        requested.Text = !state.UsesTilt ? "Upright positions only" : state.RequestedTilt is { } targetTilt
+            ? $"Tilt target: ({targetTilt.X:F1}; {targetTilt.Y:F1})" : "Reference: hold a comfortable pose";
+        current.Text = state.ReportsTilt == false ? "OTD reports no tilt · tilt blocked"
+            : state.UsesTilt ? "Reported tilt · X → / Y ↑" : "Tilt capture disabled";
         static Vector2? Finite(Vector2? p) => p is { } v && PreviewGeometry.Finite(v) ? v : null;
         static string Pair(Vector2? p) => p is { } v ? $"({v.X:F1}; {v.Y:F1})" : "—";
         var target = new Vector2((float)state.Target.X, (float)state.Target.Y);
-        raw.Text = $"Target     {Pair(target)} raw\nPosition  {Pair(Finite(latest?.Position))} raw\nTilt          {Pair(Finite(latest?.Tilt))} °\nError       {Pair(Finite(latest?.Position) - target)} raw\nBurst       {state.BurstSamples} reports · {state.BurstDurationMs:F0} ms";
-        guide.Update(state.Pose, livePose, settings.AngleToleranceDeg,
+        raw.Text = $"Target     {Pair(target)} raw\nPosition  {Pair(Finite(latest?.Position))} raw\nTilt          {Pair(Finite(latest?.Tilt))} reported\nError       {Pair(Finite(latest?.Position) - target)} raw\nBurst       {state.BurstSamples} reports · {state.BurstDurationMs:F0} ms";
+        guide.Update(state.RequestedTilt - state.ReferenceTilt, state.UsesTilt ? tilt - state.ReferenceTilt : null,
+            settings.TiltTolerance, settings.TiltRange + settings.TiltTolerance,
             cue.GuideCue, state.BurstProgress, cue.ReadyToRetry);
         Place();
     }
-
-    private static string CompactPose(RequestedPose pose) => $"alt {pose.AltitudeDeg:F1}° · az {(pose.AzimuthDeg is { } a ? $"{a:F1}°" : "—")}";
 
     private void Place()
     {

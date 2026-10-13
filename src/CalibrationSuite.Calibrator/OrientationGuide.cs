@@ -5,7 +5,7 @@ using CalibrationSuite.Otd;
 
 namespace CalibrationSuite.Calibrator;
 
-// Screen-aligned guidance shares the physical nib target. Outlines have constant
+// Reported-tilt guidance shares the physical nib target. Outlines have constant
 // DIP widths even when the guide scales; report acquisition stays outside this view.
 public sealed class OrientationGuide : FrameworkElement
 {
@@ -19,9 +19,8 @@ public sealed class OrientationGuide : FrameworkElement
     private readonly MatrixTransform placement = new();
     private Geometry outline = Geometry.Empty;
     private Geometry? outlineStroke;
-    private RequestedPose requested = new(90);
-    private RequestedPose? current;
-    private double tolerance = -1, progress;
+    private Point2? requested, current;
+    private double tolerance = -1, scale = 1, progress;
     private CaptureCue cue;
     private bool readyToRetry;
 
@@ -39,7 +38,7 @@ public sealed class OrientationGuide : FrameworkElement
             if (stroke.FillContainsWithDetail(new RectangleGeometry(bounds)) != IntersectionDetail.Empty) return true;
         }
         if (current is not { } live) return false;
-        var tip = OrientationScene.ArrowTip(live) * Radius + Anchor;
+        var tip = OrientationScene.ArrowTip(live, scale) * Radius + Anchor;
         var arrowBounds = new Rect(new Point(Anchor.X, Anchor.Y), new Point(tip.X, tip.Y));
         arrowBounds.Inflate(2, 2);
         return bounds.IntersectsWith(arrowBounds);
@@ -56,25 +55,29 @@ public sealed class OrientationGuide : FrameworkElement
         InvalidateVisual();
     }
 
-    public void Update(RequestedPose next, RequestedPose? live, double toleranceDeg, CaptureCue nextCue, double burstProgress, bool retryReady = false)
+    public void Update(Point2? next, Point2? live, double toleranceUnits, double tiltScale, CaptureCue nextCue, double burstProgress, bool retryReady = false)
     {
-        if (next == requested && live == current && toleranceDeg == tolerance && nextCue == cue && burstProgress == progress && retryReady == readyToRetry) return;
-        if (next != requested || toleranceDeg != tolerance)
+        if (next == requested && live == current && toleranceUnits == tolerance && tiltScale == scale && nextCue == cue && burstProgress == progress && retryReady == readyToRetry) return;
+        if (next != requested || toleranceUnits != tolerance || tiltScale != scale)
         {
-            outline = TargetOutline(OrientationScene.TargetSpace(next, toleranceDeg));
-            outline.Transform = placement;
+            if (next is { } target)
+            {
+                var point = OrientationScene.ArrowTip(target, tiltScale);
+                outline = new EllipseGeometry(new(point.X, point.Y), toleranceUnits / tiltScale, toleranceUnits / tiltScale) { Transform = placement };
+            }
+            else outline = Geometry.Empty;
             outlineStroke = null;
         }
-        requested = next; current = live; tolerance = toleranceDeg; cue = nextCue; progress = burstProgress; readyToRetry = retryReady;
+        requested = next; current = live; tolerance = toleranceUnits; scale = tiltScale; cue = nextCue; progress = burstProgress; readyToRetry = retryReady;
         InvalidateVisual();
     }
 
     protected override void OnRender(DrawingContext dc)
     {
         var center = new Point(Anchor.X, Anchor.Y);
-        Point End(RequestedPose pose)
+        Point End(Point2 offset)
         {
-            var tip = OrientationScene.ArrowTip(pose);
+            var tip = OrientationScene.ArrowTip(offset, scale);
             return new(center.X + tip.X * Radius, center.Y + tip.Y * Radius);
         }
 
@@ -120,7 +123,7 @@ public sealed class OrientationGuide : FrameworkElement
                 var tail = tip - direction * 4; var side = new Vector(-direction.Y, direction.X) * 2;
                 dc.DrawLine(LiveLine, tail + side, tip); dc.DrawLine(LiveLine, tail - side, tip);
             }
-            else dc.DrawEllipse(null, LiveLine, tip, 1, 1); // Upright collapses to the nib; keep the endpoint open.
+            else dc.DrawEllipse(null, LiveLine, tip, 1, 1);
         }
         dc.DrawEllipse(null, NibLine, center, 2, 2);
     }
@@ -132,29 +135,4 @@ public sealed class OrientationGuide : FrameworkElement
         pen.Freeze(); return pen;
     }
 
-    private static Geometry TargetOutline(OrientationTarget space)
-    {
-        if (space.AzimuthDeg == null)
-        {
-            var rings = new GeometryGroup();
-            rings.Children.Add(new EllipseGeometry(new(), space.OuterRadius, space.OuterRadius));
-            if (space.InnerRadius > 0) rings.Children.Add(new EllipseGeometry(new(), space.InnerRadius, space.InnerRadius));
-            return rings;
-        }
-        double low = space.AzimuthDeg.Value - space.ToleranceDeg, high = space.AzimuthDeg.Value + space.ToleranceDeg;
-        static Point At(double radius, double azimuth)
-        {
-            var point = OrientationScene.PointAt(radius, azimuth); return new(point.X, point.Y);
-        }
-        var region = new StreamGeometry();
-        using (var path = region.Open())
-        {
-            path.BeginFigure(At(space.OuterRadius, low), true, true);
-            path.ArcTo(At(space.OuterRadius, high), new(space.OuterRadius, space.OuterRadius), 0, false, SweepDirection.Counterclockwise, true, false);
-            path.LineTo(At(space.InnerRadius, high), true, false);
-            if (space.InnerRadius > 0)
-                path.ArcTo(At(space.InnerRadius, low), new(space.InnerRadius, space.InnerRadius), 0, false, SweepDirection.Clockwise, true, false);
-        }
-        return region;
-    }
 }

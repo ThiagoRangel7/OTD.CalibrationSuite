@@ -5,11 +5,12 @@ public sealed class PreparedCalibration
     private readonly double[] rows, columns;
     private readonly NodeMesh[,] nodes;
     public bool IsIdentity => nodes.Length == 0;
-    public static PreparedCalibration Identity { get; } = new([], [], new NodeMesh[0, 0]);
+    public bool RequiresTilt { get; }
+    public static PreparedCalibration Identity { get; } = new([], [], new NodeMesh[0, 0], false);
 
-    private PreparedCalibration(double[] rows, double[] columns, NodeMesh[,] nodes)
+    private PreparedCalibration(double[] rows, double[] columns, NodeMesh[,] nodes, bool requiresTilt)
     {
-        this.rows = rows; this.columns = columns; this.nodes = nodes;
+        this.rows = rows; this.columns = columns; this.nodes = nodes; RequiresTilt = requiresTilt;
     }
 
     public static PreparedCalibration Load(string? json, SourceGeometry geometry, out string? diagnostic)
@@ -34,6 +35,7 @@ public sealed class PreparedCalibration
         if (data.Nodes.Length != rows.Length || data.Nodes.Any(row => row == null || row.Length != columns.Length))
             throw new CalibrationException("Node dimensions must match grid rows and columns.");
         var nodes = new NodeMesh[rows.Length, columns.Length];
+        bool requiresTilt = false;
         for (int r = 0; r < rows.Length; r++)
             for (int c = 0; c < columns.Length; c++)
             {
@@ -41,10 +43,11 @@ public sealed class PreparedCalibration
                 {
                     var node = data.Nodes[r][c] ?? throw new CalibrationException("Missing node.");
                     nodes[r, c] = NodeMesh.Prepare(node.Samples, new(columns[c], rows[r]));
+                    requiresTilt |= node.Samples.Length > 1;
                 }
                 catch (CalibrationException ex) { throw new CalibrationException($"Node [{r}][{c}]: {ex.Message}"); }
             }
-        return new(rows, columns, nodes);
+        return new(rows, columns, nodes, requiresTilt);
     }
 
     private static double[] ValidateAxis(double[] values, double maximum, string name)
@@ -58,7 +61,8 @@ public sealed class PreparedCalibration
 
     public Point2 Correct(Point2 position, Point2 tilt)
     {
-        if (IsIdentity || !position.IsFinite || !tilt.IsFinite) return position;
+        if (IsIdentity || !position.IsFinite || RequiresTilt && !tilt.IsFinite) return position;
+        if (!RequiresTilt) tilt = default;
         var (r, v) = Locate(rows, position.Y);
         var (c, u) = Locate(columns, position.X);
         var error = nodes[r, c].Evaluate(tilt) * ((1 - u) * (1 - v))

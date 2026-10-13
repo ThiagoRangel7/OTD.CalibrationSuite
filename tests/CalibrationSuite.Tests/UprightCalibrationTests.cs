@@ -10,7 +10,7 @@ public class UprightCalibrationTests
     public void OneMeasuredSampleGivesConstantErrorWithoutMovingItsTiltToZero()
     {
         var sample = new CalibrationSample(new(153, 148), new(1, -2), new(90));
-        var mesh = NodeMesh.Prepare([sample], new(150, 150), sample.Tilt);
+        var mesh = NodeMesh.Prepare([sample], new(150, 150));
         foreach (var tilt in new Point2[] { default, sample.Tilt, new(40, -30), new(-80, 90) })
             Near(new(3, -2), mesh.Evaluate(tilt));
     }

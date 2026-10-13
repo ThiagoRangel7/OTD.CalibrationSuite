@@ -6,42 +6,43 @@ namespace CalibrationSuite.Tests;
 
 public class CaptureGuidanceTests
 {
-    [Fact]
-    public void UprightGateAndLiveArrowShareMeasurementsWithDifferentAzimuthSuppression()
-    {
-        var pose = CaptureDevice.Orientation(new(1, 0), 8);
-        var livePose = CaptureDevice.Orientation(new(1, 0), 0);
-        Assert.Null(pose.AzimuthDeg);
-        Assert.Equal(0, livePose.AzimuthDeg);
-        Assert.Equal(pose.AltitudeDeg, livePose.AltitudeDeg);
-        Assert.NotEqual(default, OrientationScene.ArrowTip(livePose));
-    }
+    private static ReportReading Reading(float x) => new(0, new(10, 20), new(x, -10), 0, "Pen");
+    private static CaptureProgress State => new(1, 1, 20, default, new(20, 0), false, 0, false, "Captured.")
+    { UsesTilt = true, ReferenceTilt = new(5, -10), RequestedTilt = new(25, -10), AcceptedAtMs = 1000, AcceptedIndex = 0 };
 
     [Theory]
-    [InlineData(70, true, CaptureCue.Ready)]
-    [InlineData(50, false, CaptureCue.Adjusting)]
-    public void AcceptedFeedbackUsesTheNextRequestedPoseForCrosshairReadiness(double altitude, bool ready, CaptureCue guideCue)
+    [InlineData(25, true, CaptureCue.Ready)]
+    [InlineData(5, false, CaptureCue.Adjusting)]
+    public void AcceptedFeedbackUsesTheNextRawTargetForReadiness(float x, bool ready, CaptureCue guideCue)
     {
-        var state = new CaptureProgress(1, 1, 20, default, new(70, 0), false, 0, false, "Captured.")
-        { AcceptedAtMs = 1000, AcceptedIndex = 0 };
-        var feedback = CaptureFeedback.Resolve(state, new(altitude, 0), 8, 1010);
+        var feedback = CaptureFeedback.Resolve(State, Reading(x), 8, 1010);
         Assert.Equal(CaptureCue.Accepted, feedback.Cue);
         Assert.Equal(ready, feedback.PoseReady);
         Assert.Equal(guideCue, feedback.GuideCue);
-        Assert.False(feedback.ReadyToRetry);
     }
 
     [Theory]
-    [InlineData(70, true, "Ready to retry")]
-    [InlineData(50, false, "Try again")]
-    public void RetryReadinessAndHeadingComeFromTheSamePoseGate(double altitude, bool ready, string heading)
+    [InlineData(25, true, "Ready to retry")]
+    [InlineData(5, false, "Try again")]
+    public void RetryRetainsItsReasonAfterReturningToTheGate(float x, bool ready, string heading)
     {
-        var state = new CaptureProgress(1, 1, 20, default, new(70, 0), false, 0, false, "Pose left the angle tolerance")
-        { BurstStatus = CaptureBurstStatus.Retry };
-        var feedback = CaptureFeedback.Resolve(state, new(altitude, 0), 8, 1000);
+        var feedback = CaptureFeedback.Resolve(State with { BurstStatus = CaptureBurstStatus.Retry, Message = "Pose left the tilt tolerance" }, Reading(x), 8, 1010);
         Assert.Equal(CaptureCue.Retry, feedback.Cue);
         Assert.Equal(ready, feedback.ReadyToRetry);
         Assert.Equal(heading, feedback.Heading);
-        Assert.Equal(CaptureCue.Retry, feedback.GuideCue);
+        Assert.Contains("Pose", feedback.Hint);
+    }
+
+    [Fact]
+    public void ReferenceAndPositionOnlyReadinessNeedAPenButNoZeroTilt()
+    {
+        var reference = State with { RequestedTilt = null, AcceptedAtMs = null };
+        Assert.Equal("Set tilt reference", CaptureFeedback.Resolve(reference, Reading(75), 8, 0).Heading);
+        Assert.Equal(CaptureCue.Waiting, CaptureFeedback.Resolve(reference, null, 8, 0).Cue);
+        var positionOnly = reference with { UsesTilt = false };
+        var feedback = CaptureFeedback.Resolve(positionOnly, Reading(0) with { Tilt = null }, 8, 0);
+        Assert.True(feedback.PoseReady);
+        Assert.Contains("upright", feedback.Hint);
+        Assert.False(CaptureFeedback.Resolve(State, Reading(25) with { Tilt = null }, 8, 2000).PoseReady);
     }
 }

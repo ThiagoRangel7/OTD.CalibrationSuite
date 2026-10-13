@@ -22,11 +22,11 @@ public sealed class NodeMesh
         this.boundary = boundary;
     }
 
-    public static NodeMesh Prepare(CalibrationSample[] samples, Point2 target, Point2? capturedUpright = null)
+    public static NodeMesh Prepare(CalibrationSample[] samples, Point2 target)
     {
         if (!target.IsFinite || samples == null || (samples.Length != 1 && samples.Length < 4)
             || samples.Any(s => s == null || !s.Tilt.IsFinite || !s.Position.IsFinite))
-            throw new CalibrationException("Require one upright sample or at least four tilt samples, with finite positions, tilts, and target.");
+            throw new CalibrationException("Require one position sample or at least four tilt samples, with finite positions, tilts, and target.");
         var sorted = samples.Length == 1 ? samples : samples.OrderBy(s => s.Tilt.X).ThenBy(s => s.Tilt.Y).ToArray();
         var errors = sorted.Select(s => s.Position - target).ToArray();
         if (errors.Any(e => !e.IsFinite)) throw new CalibrationException("Measured position errors overflow.");
@@ -69,12 +69,7 @@ public sealed class NodeMesh
         var edges = triangles.SelectMany(t => new[] { (t.A, t.B), (t.B, t.C), (t.C, t.A) });
         var boundary = edges.GroupBy(e => (Math.Min(e.Item1, e.Item2), Math.Max(e.Item1, e.Item2)))
             .Where(g => g.Count() == 1).Select(g => g.First()).Order().Select(e => PrepareEdge(e, tilts)).ToArray();
-        var result = new NodeMesh(tilts, errors, triangles.ToArray(), boundary);
-        if (!result.StrictlyContains(default))
-            throw new CalibrationException("Measured tilt hull must strictly surround (0, 0); recapture missing directions.");
-        if (capturedUpright is { } upright && !result.StrictlyContains(upright))
-            throw new CalibrationException("Captured upright pose must be strictly inside the measured hull.");
-        return result;
+        return new NodeMesh(tilts, errors, triangles.ToArray(), boundary);
     }
 
     private static BoundaryEdge PrepareEdge((int A, int B) edge, Point2[] tilts)
@@ -86,17 +81,9 @@ public sealed class NodeMesh
         return new(edge.A, edge.B, delta, 1 / lengthSquared);
     }
 
-    internal static bool CaptureTiltsSeparated(Point2 a, Point2 b) => DistanceSquared(a, b) > 0.1 * 0.1;
     private static double DistanceSquared(Point2 a, Point2 b) => Point2.Dot(a - b, a - b);
     private static int Side(Point2 a, Point2 b, Point2 p) =>
         CGAlgorithmsDD.OrientationIndex(a.X, a.Y, b.X, b.Y, p.X, p.Y);
-    private bool StrictlyContains(Point2 p)
-    {
-        if (boundary.Length < 3) return false;
-        foreach (var edge in boundary)
-            if (Side(tilts[edge.A], tilts[edge.B], p) <= 0) return false;
-        return true;
-    }
 
     public Point2 Evaluate(Point2 tilt)
     {

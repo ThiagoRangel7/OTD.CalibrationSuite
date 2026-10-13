@@ -11,6 +11,10 @@ public sealed record CaptureProgress(int Index, int Captured, int Total, Point2 
     public double BurstDurationMs { get; init; }
     public double? AcceptedAtMs { get; init; }
     public int? AcceptedIndex { get; init; }
+    public bool UsesTilt { get; init; }
+    public bool? ReportsTilt { get; init; }
+    public Point2? ReferenceTilt { get; init; }
+    public Point2? RequestedTilt { get; init; }
 }
 
 // The lock only joins UI commands with the serialized acquisition consumer. WPF never samples a burst.
@@ -19,15 +23,14 @@ public sealed class CaptureController
     private readonly object sync = new();
     private readonly CaptureDraft draft;
     private readonly CaptureBurst burst;
-    private readonly string? requiredReportType;
+    private bool? reportsTilt;
     private (double Time, int Index)? accepted;
     public static double Now => Stopwatch.GetTimestamp() * 1000.0 / Stopwatch.Frequency;
 
-    public CaptureController(CaptureDraft draft, Func<Point2, RequestedPose> orientation, string? requiredReportType = null)
+    public CaptureController(CaptureDraft draft)
     {
         this.draft = draft;
-        this.requiredReportType = requiredReportType;
-        burst = new(draft.Settings, draft.Geometry, orientation);
+        burst = new(draft.Settings, draft.Geometry);
     }
 
     public void Read(ReportReading reading)
@@ -41,19 +44,20 @@ public sealed class CaptureController
                 burst.CheckTimeout(time);
                 return;
             }
-            if (reading.Kind != ReadingKind.Paired || reading.Position == null || reading.Tilt == null)
+            if (reading.Kind != ReadingKind.Paired || reading.Position == null)
             {
                 burst.Reject(time, reading.Status);
                 return;
             }
-            if (requiredReportType != null && reading.ReportType != requiredReportType)
+            if (reportsTilt == null)
             {
-                burst.Reject(time, "Orientation is not verified for this report type");
-                return;
+                reportsTilt = reading.Tilt.HasValue;
+                if (reportsTilt == false) draft.UsePositionOnly();
             }
+            if (draft.UsesTilt && reading.Tilt == null) { burst.Reject(time, "Tilt missing from pen report"); return; }
 
             var position = reading.Position.Value;
-            var tilt = reading.Tilt.Value;
+            var tilt = reading.Tilt ?? default;
             var sample = burst.Add(time, new(position.X, position.Y), new(tilt.X, tilt.Y));
             if (sample == null) return;
             try
@@ -68,7 +72,7 @@ public sealed class CaptureController
 
     public bool Start(double now)
     {
-        lock (sync) return !draft.Complete && burst.Start(draft.CurrentPose, now);
+        lock (sync) return !draft.Complete && burst.Start(draft.RequestedTilt, now);
     }
 
     public void Previous()
@@ -108,7 +112,11 @@ public sealed class CaptureController
                 BurstProgress = burst.Progress,
                 BurstDurationMs = burst.DurationMs,
                 AcceptedAtMs = accepted?.Time,
-                AcceptedIndex = accepted?.Index
+                AcceptedIndex = accepted?.Index,
+                UsesTilt = draft.UsesTilt,
+                ReportsTilt = reportsTilt,
+                ReferenceTilt = draft.ReferenceTilt,
+                RequestedTilt = draft.RequestedTilt
             };
         }
     }

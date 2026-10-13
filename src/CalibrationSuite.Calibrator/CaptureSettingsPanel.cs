@@ -22,19 +22,19 @@ public sealed class CaptureSettingsPanel : Grid
         AddField(grid, nameof(defaults.RowCount), "Rows", defaults.RowCount);
         AddField(grid, nameof(defaults.ColumnCount), "Columns", defaults.ColumnCount);
         AddField(grid, nameof(defaults.GridInsetMm), "Grid inset", defaults.GridInsetMm, "mm");
-        var poses = Group("Pen poses", "0 directions or levels = upright only.");
-        AddField(poses, nameof(defaults.AzimuthCount), "Azimuth directions", defaults.AzimuthCount);
-        AddField(poses, nameof(defaults.NonUprightAltitudeCount), "Non-upright levels", defaults.NonUprightAltitudeCount);
-        AddField(poses, nameof(defaults.MinAltitudeDeg), "Minimum altitude", defaults.MinAltitudeDeg, "°", "50° altitude allows 40° of lean from upright.");
+        var poses = Group("Reported tilt", "No tilt report blocks tilt capture. Hold upright for positions only; set directions or levels to 0 to choose this yourself.");
+        AddField(poses, nameof(defaults.TiltDirections), "Tilt directions", defaults.TiltDirections);
+        AddField(poses, nameof(defaults.TiltLevels), "Tilt levels", defaults.TiltLevels);
+        AddField(poses, nameof(defaults.TiltRange), "Tilt range", defaults.TiltRange, "units", "Reported-coordinate distance from each target's first stable reference. Reduce if targets are hard to reach.");
         var sampling = Group("Sampling");
         AddField(sampling, nameof(defaults.CaptureWindowMs), "Burst duration", defaults.CaptureWindowMs, "ms", "Minimum time to hold a valid pose during capture.");
         AddField(sampling, nameof(defaults.MinSamplesPerCapture), "Minimum reports", defaults.MinSamplesPerCapture);
         AddField(sampling, nameof(defaults.ReportGapTimeoutMs), "Report gap timeout", defaults.ReportGapTimeoutMs, "ms");
         AddField(sampling, nameof(defaults.CaptureTimeoutMs), "Capture timeout", defaults.CaptureTimeoutMs, "ms");
         var quality = Group("Quality limits", "Stability: 95th-percentile deviation from the median.");
-        AddField(quality, nameof(defaults.AngleToleranceDeg), "Angle tolerance", defaults.AngleToleranceDeg, "°", "Allowed difference from the requested pen angle. A larger value makes the target easier to hit.");
+        AddField(quality, nameof(defaults.TiltTolerance), "Tilt tolerance", defaults.TiltTolerance, "units", "Allowed reported-coordinate distance from the target tilt. A larger value makes the target easier to hit.");
         AddField(quality, nameof(defaults.PositionStabilityMm), "Position stability", defaults.PositionStabilityMm, "mm", "Allowed tip movement during capture. Smaller values require a steadier hold.");
-        AddField(quality, nameof(defaults.TiltStabilityDeg), "Tilt stability", defaults.TiltStabilityDeg, "°", "Allowed tilt variation during capture. Smaller values require a steadier hold.");
+        AddField(quality, nameof(defaults.TiltStability), "Tilt stability", defaults.TiltStability, "units", "Allowed reported tilt variation during capture. Smaller values require a steadier hold.");
         Children.Add(validation);
         ArrangeCards(false);
         SizeChanged += (_, _) => { bool wide = ActualWidth >= 620; if (wide != twoColumns) ArrangeCards(wide); };
@@ -65,7 +65,7 @@ public sealed class CaptureSettingsPanel : Grid
     private void AddField(StackPanel parent, string key, string label, object initial, string unit = "", string? hint = null)
     {
         var row = new Grid { Margin = new(0, 2, 0, 2) };
-        row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = new(72) }); row.ColumnDefinitions.Add(new() { Width = new(32) });
+        row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = new(72) }); row.ColumnDefinitions.Add(new() { Width = new(42) });
         row.RowDefinitions.Add(new() { Height = GridLength.Auto }); row.RowDefinitions.Add(new() { Height = GridLength.Auto });
         var box = new TextBox { Text = Convert.ToString(initial, CultureInfo.CurrentCulture), MinHeight = 30,
             HorizontalContentAlignment = HorizontalAlignment.Right, ToolTip = hint ?? label };
@@ -94,11 +94,11 @@ public sealed class CaptureSettingsPanel : Grid
             var value = new CaptureSettings
             {
                 RowCount = Count(nameof(CaptureSettings.RowCount)), ColumnCount = Count(nameof(CaptureSettings.ColumnCount)),
-                GridInsetMm = Number(nameof(CaptureSettings.GridInsetMm)), AzimuthCount = Count(nameof(CaptureSettings.AzimuthCount)),
-                NonUprightAltitudeCount = Count(nameof(CaptureSettings.NonUprightAltitudeCount)), MinAltitudeDeg = Number(nameof(CaptureSettings.MinAltitudeDeg)),
-                AngleToleranceDeg = Number(nameof(CaptureSettings.AngleToleranceDeg)), CaptureWindowMs = Count(nameof(CaptureSettings.CaptureWindowMs)),
+                GridInsetMm = Number(nameof(CaptureSettings.GridInsetMm)), TiltDirections = Count(nameof(CaptureSettings.TiltDirections)),
+                TiltLevels = Count(nameof(CaptureSettings.TiltLevels)), TiltRange = Number(nameof(CaptureSettings.TiltRange)),
+                TiltTolerance = Number(nameof(CaptureSettings.TiltTolerance)), CaptureWindowMs = Count(nameof(CaptureSettings.CaptureWindowMs)),
                 MinSamplesPerCapture = Count(nameof(CaptureSettings.MinSamplesPerCapture)), PositionStabilityMm = Number(nameof(CaptureSettings.PositionStabilityMm)),
-                TiltStabilityDeg = Number(nameof(CaptureSettings.TiltStabilityDeg)), ReportGapTimeoutMs = Count(nameof(CaptureSettings.ReportGapTimeoutMs)),
+                TiltStability = Number(nameof(CaptureSettings.TiltStability)), ReportGapTimeoutMs = Count(nameof(CaptureSettings.ReportGapTimeoutMs)),
                 CaptureTimeoutMs = Count(nameof(CaptureSettings.CaptureTimeoutMs))
             };
             value.Validate(geometry);

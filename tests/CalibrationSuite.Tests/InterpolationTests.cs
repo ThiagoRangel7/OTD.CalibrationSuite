@@ -12,7 +12,7 @@ public class InterpolationTests
         Point2 target = new(300, 500);
         Point2[] tilts = [new(-40, -40), new(-40, 40), new(1, 2), new(40, -40), new(40, 40), new(0, -40)];
         var samples = Samples(target, t => new(t.X * t.X / 10 + 9, t.Y * 2 - 3), tilts);
-        var mesh = NodeMesh.Prepare(samples, target, samples[2].Tilt);
+        var mesh = NodeMesh.Prepare(samples, target);
         foreach (var sample in samples) Near(sample.Position - target, mesh.Evaluate(sample.Tilt));
         Near(new(9.1, 1), mesh.Evaluate(new(1, 2)));
     }
@@ -95,8 +95,6 @@ public class InterpolationTests
         Point2[][] invalid =
         [
             [new(-1, 0), new(0, 0), new(1, 0), new(2, 0)], // collinear
-            [new(0, 0), new(0, 40), new(40, 0), new(40, 40)], // origin on hull
-            [new(1, 1), new(1, 40), new(40, 1), new(40, 40)], // outside
             [new(-40, -40), new(-40, 40), new(40, 0)], // only three
             [.. Tilts, new(0, 0)] // duplicate
         ];
@@ -105,12 +103,13 @@ public class InterpolationTests
     }
 
     [Fact]
-    public void LoadedMeshesNeedOriginCoverageButNotAnUprightSampleOrCaptureSeparation()
+    public void LoadedMeshesNeedNoOriginCoverageOrCaptureSeparation()
     {
         Point2[] ring = [new(-40, -40), new(-40, 40), new(40, -40), new(40, 40)];
         var samples = Samples(default, t => t, ring);
         Near(default, NodeMesh.Prepare(samples, default).Evaluate(default));
-        Assert.Throws<CalibrationException>(() => NodeMesh.Prepare(samples, default, samples[0].Tilt));
+        var translated = samples.Select(s => s with { Tilt = s.Tilt + new Point2(100, 200) }).ToArray();
+        Near(default, NodeMesh.Prepare(translated, default).Evaluate(new(100, 200)));
         var close = Samples(default, t => t, [.. Tilts, new(0.05, 0)]);
         _ = NodeMesh.Prepare(close, default);
     }

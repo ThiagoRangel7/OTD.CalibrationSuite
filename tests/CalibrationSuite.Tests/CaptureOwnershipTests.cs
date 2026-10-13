@@ -6,7 +6,7 @@ namespace CalibrationSuite.Tests;
 public class CaptureOwnershipTests
 {
     private static readonly SourceGeometry Geometry = new(20000, 10000, 200, 100);
-    private static readonly CaptureSettings Settings = new() { RowCount = 2, ColumnCount = 2, AzimuthCount = 0 };
+    private static readonly CaptureSettings Settings = new() { RowCount = 2, ColumnCount = 2, TiltDirections = 0 };
 
     [Fact]
     public void LayoutViewsCannotChangeTargetsOrRequestedPoses()
@@ -20,11 +20,11 @@ public class CaptureOwnershipTests
 
         Assert.Equal(target, draft.Target(0));
         Assert.Throws<NotSupportedException>(() => ((IList<RequestedPose>)draft.Poses)[0] = new(10, 20));
-        Assert.Equal(new RequestedPose(90), draft.CurrentPose);
+        Assert.Equal(new RequestedPose(0), draft.CurrentPose);
 
         var recapture = draft.Recapture(0, false);
         Assert.Equal(target, recapture.CurrentTarget);
-        Assert.Equal(new RequestedPose(90), recapture.CurrentPose);
+        Assert.Equal(new RequestedPose(0), recapture.CurrentPose);
     }
 
     [Fact]
@@ -89,9 +89,9 @@ public class CaptureOwnershipTests
     [Fact]
     public void ExtremeTiltCountsAreRejectedWhileUprightOnlyIgnoresUnusedDirections()
     {
-        var settings = Settings with { AzimuthCount = int.MaxValue, NonUprightAltitudeCount = 2, AngleToleranceDeg = 1e-9 };
+        var settings = Settings with { TiltDirections = int.MaxValue, TiltLevels = 2, TiltTolerance = 1e-9 };
         Assert.Throws<CalibrationException>(() => settings.Validate());
-        (settings with { NonUprightAltitudeCount = 0 }).Validate();
+        (settings with { TiltLevels = 0 }).Validate();
     }
 
     private static void Fill(CaptureDraft draft)

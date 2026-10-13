@@ -8,87 +8,16 @@ namespace CalibrationSuite.Tests;
 
 public class OrientationVisualTests
 {
-    [Fact]
-    public void UprightArrowCollapsesToThePhysicalNibInTopView()
-    {
-        Assert.Equal(new Point2(0, 0), OrientationScene.ArrowTip(new(90)));
-    }
-
     [Theory]
-    [InlineData(0, 0.8660254038, 0)] // Eraser left => arrow right.
-    [InlineData(90, 0, -0.8660254038)] // Eraser down => arrow up.
-    [InlineData(180, -0.8660254038, 0)]
-    [InlineData(270, 0, 0.8660254038)]
-    public void CardinalTopViewOpposesTheEraserAtThirtyDegrees(double azimuth, double x, double y)
+    [InlineData(40, 0, 1, 0)]
+    [InlineData(0, 40, 0, -1)]
+    [InlineData(-40, 0, -1, 0)]
+    [InlineData(0, -40, 0, 1)]
+    [InlineData(20, 20, 0.5, -0.5)]
+    public void ReportedCoordinatePlotHasKnownAxesAndScale(double x, double y, double plotX, double plotY)
     {
-        var tip = OrientationScene.ArrowTip(new(30, azimuth));
-        Assert.Equal(x, tip.X, 6); Assert.Equal(y, tip.Y, 6);
+        Assert.Equal(new Point2(plotX, plotY), OrientationScene.ArrowTip(new(x, y), 40));
     }
-
-    [Theory]
-    [InlineData(35.264389682754654, 35.264389682754654, 0.5, -0.5)]
-    [InlineData(-35.264389682754654, 35.264389682754654, -0.5, -0.5)]
-    [InlineData(-35.264389682754654, -35.264389682754654, -0.5, 0.5)]
-    [InlineData(35.264389682754654, -35.264389682754654, 0.5, 0.5)]
-    public void DiagonalRawTiltUsesTheVerifiedAdapterAndReversesBothPlanarAxes(double rawX, double rawY, double x, double y)
-    {
-        var tilt = new Point2(rawX, rawY);
-        var pose = CaptureDevice.Orientation(tilt, 0);
-        var tip = OrientationScene.ArrowTip(pose);
-        Assert.Equal(x, tip.X, 6); Assert.Equal(y, tip.Y, 6);
-        Assert.Equal(new Point2(rawX, rawY), tilt); // Visualization never replaces measured coordinates.
-    }
-
-    [Fact]
-    public void LiveDirectionRemainsContinuousInsideTheUprightGate()
-    {
-        var tilt = new Point2(1, -1);
-        var gate = CaptureDevice.Orientation(tilt, 3);
-        Assert.Null(gate.AzimuthDeg);
-        Assert.True(OrientationGuidance.WithinTolerance(gate, new(90), 3));
-        var tip = OrientationScene.ArrowTip(CaptureDevice.Orientation(tilt, 0));
-        Assert.Equal(0.01744975, tip.X, 6); Assert.Equal(0.01744975, tip.Y, 6);
-    }
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(0.25)]
-    [InlineData(3)]
-    [InlineData(12)]
-    public void UprightTargetReflectsTheConfiguredToleranceWithoutAMinimumDecorativeRadius(double tolerance)
-    {
-        var space = OrientationScene.TargetSpace(new(90), tolerance);
-        Assert.Equal(0, space.InnerRadius);
-        Assert.Equal(Math.Sin(tolerance * Math.PI / 180), space.OuterRadius, 12);
-        Assert.Null(space.AzimuthDeg);
-    }
-
-    [Theory]
-    [InlineData(0)]
-    [InlineData(45)]
-    [InlineData(90)]
-    [InlineData(180)]
-    [InlineData(270)]
-    [InlineData(359)]
-    public void TiltTargetMatchesAltitudeAndCircularAzimuthGates(double azimuth)
-    {
-        var requested = new RequestedPose(70, azimuth);
-        var space = OrientationScene.TargetSpace(requested, 3);
-        Assert.Equal(0.2923717047, space.InnerRadius, 9); // 73° altitude.
-        Assert.Equal(0.3907311285, space.OuterRadius, 9); // 67° altitude.
-        foreach (double altitude in new[] { 66.9, 67.01, 70, 72.99, 73.1 })
-            foreach (double delta in new[] { -3.1, -2.99, 0, 2.99, 3.1 })
-            {
-                var current = new RequestedPose(altitude, (azimuth + delta + 360) % 360);
-                var tip = OrientationScene.ArrowTip(current);
-                double radius = Math.Sqrt(Point2.Dot(tip, tip));
-                double tipAzimuth = Math.Atan2(-tip.Y, tip.X) * 180 / Math.PI;
-                bool insideOutline = radius >= space.InnerRadius && radius <= space.OuterRadius
-                    && Math.Abs(Math.IEEERemainder(tipAzimuth - space.AzimuthDeg!.Value, 360)) <= space.ToleranceDeg;
-                Assert.Equal(OrientationGuidance.WithinTolerance(current, requested, 3), insideOutline);
-            }
-    }
-
     [Theory]
     [InlineData(1920, 1080)]
     [InlineData(960, 540)]
@@ -129,7 +58,7 @@ public class OrientationVisualTests
     {
         RowCount = 2,
         ColumnCount = 2,
-        AzimuthCount = 0,
+        TiltDirections = 0,
         CaptureWindowMs = 10,
         MinSamplesPerCapture = 4,
         CaptureTimeoutMs = 100,
@@ -140,7 +69,7 @@ public class OrientationVisualTests
     [Fact]
     public void BurstProgressUsesEligibleReportSpanAndBothMinima()
     {
-        var capture = new CaptureController(new(Settings, Geometry), _ => new(90));
+        var capture = new CaptureController(new(Settings, Geometry));
         capture.Start(0);
         capture.Read(Reading(-1)); Assert.Equal(0, capture.Snapshot(0).BurstProgress);
         capture.Read(Reading(20)); Assert.Equal(0, capture.Snapshot(20).BurstProgress);
@@ -152,47 +81,47 @@ public class OrientationVisualTests
         Assert.Equal(1, accepted.BurstProgress); Assert.Equal(10, accepted.BurstDurationMs, 6);
         Assert.Equal(CaptureBurstStatus.Accepted, accepted.BurstStatus);
         Assert.Equal(0, accepted.AcceptedIndex); Assert.Equal(1, accepted.Index);
-        Assert.Equal(CaptureCue.Accepted, CaptureFeedback.Resolve(accepted, new(90), 3, 30).Cue);
-        Assert.Equal(CaptureCue.Ready, CaptureFeedback.Resolve(accepted, new(90), 3, 880).Cue);
+        Assert.Equal(CaptureCue.Accepted, CaptureFeedback.Resolve(accepted, Reading(0), 3, 30).Cue);
+        Assert.Equal(CaptureCue.Ready, CaptureFeedback.Resolve(accepted, Reading(0), 3, 880).Cue);
         Assert.Equal(CaptureCue.Waiting, CaptureFeedback.Resolve(accepted, null, 3, 880).Cue);
     }
 
     [Fact]
     public void NavigationAndRestartRemoveAcceptedCuesAndRetriesCannotAppearAccepted()
     {
-        var capture = new CaptureController(new(Settings with { MinSamplesPerCapture = 2 }, Geometry), _ => new(90));
+        var capture = new CaptureController(new(Settings with { MinSamplesPerCapture = 2 }, Geometry));
         capture.Start(0); capture.Read(Reading(0)); capture.Read(Reading(10));
         capture.Previous(); Assert.Null(capture.Snapshot(11).AcceptedAtMs);
-        Assert.Equal(CaptureCue.Ready, CaptureFeedback.Resolve(capture.Snapshot(11), new(90), 3, 11).Cue);
-        capture.Start(11); Assert.Equal(CaptureCue.Capturing, CaptureFeedback.Resolve(capture.Snapshot(11), new(90), 3, 11).Cue);
+        Assert.Equal(CaptureCue.Ready, CaptureFeedback.Resolve(capture.Snapshot(11), Reading(0), 3, 11).Cue);
+        capture.Start(11); Assert.Equal(CaptureCue.Capturing, CaptureFeedback.Resolve(capture.Snapshot(11), Reading(0), 3, 11).Cue);
         var retry = capture.Snapshot(52);
         Assert.Equal(CaptureBurstStatus.Retry, retry.BurstStatus); Assert.Equal(0, retry.BurstProgress);
-        Assert.Equal(CaptureCue.Retry, CaptureFeedback.Resolve(retry, new(90), 3, 52).Cue);
+        Assert.Equal(CaptureCue.Retry, CaptureFeedback.Resolve(retry, Reading(0), 3, 52).Cue);
         Assert.Equal(1, retry.Captured); // Retry preserves the prior measurement.
         capture.Restart(); var reset = capture.Snapshot(53);
         Assert.Equal(0, reset.Captured); Assert.Null(reset.AcceptedAtMs); Assert.Equal(CaptureBurstStatus.Idle, reset.BurstStatus);
     }
 
     [Fact]
-    public void ReadinessStillRequiresAltitudeAndCircularAzimuthAndCannotUseMissingPose()
+    public void ReadinessUsesTheReportedCoordinateCircleAndNeedsAFreshPenReading()
     {
-        var state = new CaptureProgress(0, 0, 4, default, new(50, 1), false, 0, false, "");
-        Assert.Equal(CaptureCue.Ready, CaptureFeedback.Resolve(state, new(50, 359), 3, 0).Cue);
-        Assert.Equal(CaptureCue.Adjusting, CaptureFeedback.Resolve(state, new(54, 1), 3, 0).Cue);
-        Assert.Equal(CaptureCue.Adjusting, CaptureFeedback.Resolve(state, new(50, 5), 3, 0).Cue);
-        Assert.Equal(CaptureCue.Waiting, CaptureFeedback.Resolve(state, null, 3, 0).Cue);
+        var state = new CaptureProgress(1, 1, 20, default, new(40, 0), false, 0, false, "")
+        { UsesTilt = true, ReferenceTilt = new(100, 200), RequestedTilt = new(140, 200) };
+        Assert.Equal(CaptureCue.Ready, CaptureFeedback.Resolve(state, Reading(0) with { Tilt = new(143, 204) }, 5, 0).Cue);
+        Assert.Equal(CaptureCue.Adjusting, CaptureFeedback.Resolve(state, Reading(0) with { Tilt = new(144, 204) }, 5, 0).Cue);
+        Assert.Equal(CaptureCue.Waiting, CaptureFeedback.Resolve(state, null, 5, 0).Cue);
     }
 
     [Fact]
     public void ReplacingAnExistingMeasurementStillProducesANewAcceptedCue()
     {
         var draft = new CaptureDraft(Settings with { MinSamplesPerCapture = 2 }, Geometry);
-        var capture = new CaptureController(draft, _ => new(90));
+        var capture = new CaptureController(draft);
         capture.Start(0); capture.Read(Reading(0)); capture.Read(Reading(10)); capture.Previous();
         capture.Start(12); capture.Read(Reading(12)); capture.Read(Reading(22));
         var snapshot = capture.Snapshot(22);
         Assert.Equal(1, snapshot.Captured); Assert.Equal(0, snapshot.AcceptedIndex); Assert.Equal(22, snapshot.AcceptedAtMs!.Value, 6);
-        Assert.Equal(CaptureCue.Accepted, CaptureFeedback.Resolve(snapshot, new(90), 3, 22).Cue);
+        Assert.Equal(CaptureCue.Accepted, CaptureFeedback.Resolve(snapshot, Reading(0), 3, 22).Cue);
     }
 
     [Fact]
@@ -201,18 +130,18 @@ public class OrientationVisualTests
         Assert.Equal(nameof(CaptureSettings.RowCount), Assert.Throws<CalibrationException>(() => (Settings with { RowCount = 1 }).Validate()).ParameterName);
         Assert.Equal(nameof(CaptureSettings.CaptureTimeoutMs), Assert.Throws<CalibrationException>(() => (Settings with { CaptureTimeoutMs = 10 }).Validate()).ParameterName);
         Assert.Equal(nameof(CaptureSettings.GridInsetMm), Assert.Throws<CalibrationException>(() => (Settings with { GridInsetMm = 100 }).CreateGrid(Geometry)).ParameterName);
-        Assert.Equal(nameof(CaptureSettings.AzimuthCount), Assert.Throws<CalibrationException>(() => (Settings with { AzimuthCount = 2, NonUprightAltitudeCount = 1 }).Validate()).ParameterName);
+        Assert.Equal(nameof(CaptureSettings.TiltDirections), Assert.Throws<CalibrationException>(() => (Settings with { TiltDirections = 2, TiltLevels = 1 }).Validate()).ParameterName);
     }
 
     [Fact]
     public void FailedMeshStorageKeepsARecoveryHintAndNeverAppearsAccepted()
     {
         var state = new CaptureProgress(4, 4, 20, default, new(50, 270), false, 0, false,
-            "Measured tilt hull must strictly surround (0, 0); recapture missing directions.")
+            "Tilt mesh does not retain every distinct sample; recapture unusable or collinear coverage.")
         { BurstStatus = CaptureBurstStatus.Retry, AcceptedAtMs = 999 };
-        var feedback = CaptureFeedback.Resolve(state, new(50, 270), 3, 1000);
+        var feedback = CaptureFeedback.Resolve(state, Reading(0), 3, 1000);
         Assert.Equal(CaptureCue.Retry, feedback.Cue);
-        Assert.Contains("coverage", feedback.Hint); Assert.Contains("Backspace", feedback.Hint);
-        Assert.Equal("Measured tilt hull must strictly surround (0, 0); recapture missing directions.", state.Message);
+        Assert.Contains("coverage", feedback.Hint); Assert.Contains("revisit", feedback.Hint);
+        Assert.Equal("Tilt mesh does not retain every distinct sample; recapture unusable or collinear coverage.", state.Message);
     }
 }

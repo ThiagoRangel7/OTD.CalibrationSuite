@@ -78,7 +78,8 @@ public class IntegrationTests
         var report = new DebugReportData(Tablet(), new TabletReport { Raw = [], Position = new(1, 2) });
         var reading = ReportReadingFactory.Read(report, 1);
         Assert.Null(reading.Tilt);
-        Assert.Contains("tilt missing", reading.Status);
+        Assert.Equal(ReadingKind.Paired, reading.Kind);
+        Assert.Contains("no tilt reported", reading.Status);
     }
 
     [Fact]

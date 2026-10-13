@@ -35,7 +35,11 @@ public sealed record SourceGeometry(
     private static bool Close(double a, double b) => Math.Abs(a - b) <= 1e-6 * Math.Max(Math.Abs(a), Math.Abs(b));
 }
 
-public readonly record struct RequestedPose([property: JsonRequired] double AltitudeDeg, double? AzimuthDeg = null);
+// Descriptive capture metadata; correction uses only measured Position/Tilt.
+public readonly record struct RequestedPose(double Magnitude, double? DirectionDeg = null)
+{
+    [JsonIgnore] public Point2 Offset => OrientationScene.PointAt(Magnitude, DirectionDeg ?? 0);
+}
 public sealed record CalibrationSample(
     [property: JsonRequired] Point2 Position, [property: JsonRequired] Point2 Tilt,
     RequestedPose? RequestedPose = null);

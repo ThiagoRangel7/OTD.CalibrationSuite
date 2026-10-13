@@ -48,7 +48,7 @@ public class FilterTests
             AppInfo.PluginManager = new DesktopPluginManager();
             Assert.True(AppInfo.PluginManager.InstallPlugin(package));
             var context = Assert.Single(AppInfo.PluginManager.GetLoadedPlugins());
-            Assert.Equal("Calibration Suite", context.GetMetadata().Name);
+            Assert.Equal("CalibrationSuite", context.GetMetadata().Name);
             Assert.Equal(new[] { "CalibrationSuite.Core.dll", "CalibrationSuite.Filter.dll", "NetTopologySuite.dll" },
                 context.Directory.GetFiles("*.dll").Select(f => f.Name).OrderBy(n => n));
             Assert.Equal(configuration == "Debug" ? 2 : 0, context.Directory.GetFiles("*.pdb").Length);

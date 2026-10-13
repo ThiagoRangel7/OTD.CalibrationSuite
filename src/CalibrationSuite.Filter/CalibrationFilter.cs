@@ -54,14 +54,19 @@ public sealed class CalibrationFilter : IPositionedPipelineElement<IDeviceReport
         if (report is OutOfRangeReport or IProximityReport { NearProximity: false } or IEraserReport { Eraser: true })
             return;
 
-        if (report is not IAbsolutePositionReport position || report is not ITiltReport tilt)
+        if (report is not IAbsolutePositionReport position)
         {
             if (report is IAbsolutePositionReport or ITiltReport) Unsupported();
             return;
         }
 
         var raw = position.Position;
-        var orientation = tilt.Tilt;
+        var orientation = Vector2.Zero;
+        if (calibration.RequiresTilt)
+        {
+            if (report is not ITiltReport tilt) { Unsupported(); return; }
+            orientation = tilt.Tilt;
+        }
         if (!PreviewGeometry.Finite(raw) || !PreviewGeometry.Finite(orientation))
         {
             Unsupported();

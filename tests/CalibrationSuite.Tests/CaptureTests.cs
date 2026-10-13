@@ -15,30 +15,29 @@ public class CaptureTests
     {
         RowCount = 2,
         ColumnCount = 2,
-        AzimuthCount = 0,
+        TiltDirections = 0,
         CaptureWindowMs = 10,
         MinSamplesPerCapture = 2,
         CaptureTimeoutMs = 100,
         ReportGapTimeoutMs = 40,
-        AngleToleranceDeg = 3,
+        TiltTolerance = 3,
         PositionStabilityMm = 0.25,
-        TiltStabilityDeg = 2
+        TiltStability = 2
     };
-    private static RequestedPose Orientation(Point2 tilt) => CaptureDevice.Orientation(tilt, 3);
-    private static CaptureBurst Burst(CaptureSettings? settings = null) => new(settings ?? Settings, Geometry, Orientation);
+    private static CaptureBurst Burst(CaptureSettings? settings = null) => new(settings ?? Settings, Geometry);
 
     [Fact]
     public void DurationStartsAtFirstEligibleReportAndBothMinimaMustPass()
     {
         var burst = Burst(Settings with { MinSamplesPerCapture = 3 });
-        Assert.True(burst.Start(new(90), 0)); Assert.False(burst.Start(new(90), 2));
+        Assert.True(burst.Start(null, 0)); Assert.False(burst.Start(null, 2));
         Assert.Null(burst.Add(-1, default, default)); Assert.Equal(0, burst.Count);
         Assert.Null(burst.Add(20, new(100, 200), default));
         Assert.Null(burst.Add(25, new(100, 200), default));
         Assert.Null(burst.Add(29, new(100, 200), default));
         Assert.NotNull(burst.Add(30, new(100, 200), default));
         Assert.False(burst.Active); Assert.Equal(4, burst.Count);
-        burst.Start(new(90), 50);
+        burst.Start(null, 50);
         Assert.Null(burst.Add(50, default, default)); Assert.Null(burst.Add(60, default, default));
         Assert.NotNull(burst.Add(60, default, default)); // Repeated event/time is a distinct sample.
     }
@@ -46,22 +45,22 @@ public class CaptureTests
     [Fact]
     public void EvenMediansUseActualMeasurementsRatherThanRequestedPoses()
     {
-        var burst = Burst(); burst.Start(new(90), 0);
+        var burst = Burst(); burst.Start(null, 0);
         burst.Add(0, new(100, 200), new(0, 1));
         var sample = burst.Add(10, new(102, 204), new(2, 0));
         Assert.Equal(new Point2(101, 202), sample!.Position);
         Assert.Equal(new Point2(1, 0.5), sample.Tilt);
-        Assert.Equal(new RequestedPose(90), sample.RequestedPose);
+        Assert.Null(sample.RequestedPose);
     }
 
     [Fact]
     public void BurstStatisticsDoNotRetainValuesFromLongerPreviousAttempts()
     {
         var burst = Burst();
-        burst.Start(new(90), 0);
+        burst.Start(null, 0);
         for (int i = 0; i < 12; i++) burst.Add(0, new(1000, 2000), default);
         Assert.NotNull(burst.Add(10, new(1000, 2000), default));
-        burst.Start(new(90), 20);
+        burst.Start(null, 20);
         burst.Add(20, new(10, 20), new(0, 1));
         var result = burst.Add(30, new(12, 24), new(2, 0));
         Assert.Equal(new Point2(11, 22), result!.Position);
@@ -71,7 +70,7 @@ public class CaptureTests
     [Fact]
     public void RestartingPartialRecaptureClearsOnlyItsStoredSelection()
     {
-        var original = new CaptureDraft(Settings with { AzimuthCount = 4, NonUprightAltitudeCount = 1 }, Geometry);
+        var original = new CaptureDraft(Settings with { TiltDirections = 4, TiltLevels = 1 }, Geometry);
         Fill(original);
         var recapture = original.Recapture(7, true);
         recapture.Previous();
@@ -108,31 +107,33 @@ public class CaptureTests
     [Fact]
     public void EveryReportMustPassTheGateEvenWhenMedianWouldPass()
     {
-        var burst = Burst(Settings with { MinSamplesPerCapture = 3 }); burst.Start(new(90), 0);
+        var burst = Burst(Settings with { MinSamplesPerCapture = 3 }); burst.Start(new(0, 0), 0);
         burst.Add(0, default, default); burst.Add(5, default, new(4, 0));
         Assert.False(burst.Active); Assert.Equal(0, burst.Count);
         Assert.Null(burst.Add(10, default, default)); Assert.Contains("Pose", burst.Message);
     }
 
     [Fact]
-    public void UprightOmitsAzimuthAndTiltPosesUseCircularDistance()
+    public void ReferenceCaptureAcceptsAnyStableTiltAndTargetGatesUseRawDistance()
     {
-        var burst = new CaptureBurst(Settings, Geometry, _ => new(50, 359)); burst.Start(new(50, 1), 0);
-        burst.Add(0, default, default); Assert.NotNull(burst.Add(10, default, default));
-        var upright = new CaptureBurst(Settings, Geometry, _ => new(89, 170)); upright.Start(new(90), 0);
-        upright.Add(0, default, default); Assert.NotNull(upright.Add(10, default, default));
+        var burst = Burst(); burst.Start(null, 0);
+        burst.Add(0, default, new(120, -80)); Assert.NotNull(burst.Add(10, default, new(120, -80)));
+        burst.Start(new(125, -80), 20);
+        burst.Add(20, default, new(125, -80));
+        Assert.Null(burst.Add(30, default, new(129, -80)));
+        Assert.Contains("Pose", burst.Message);
     }
 
     [Fact]
     public void GapAndTotalTimeoutRejectOnlyTheAttemptAndRetryStartsEmpty()
     {
-        var burst = Burst(); burst.Start(new(90), 0); burst.CheckTimeout(41);
+        var burst = Burst(); burst.Start(null, 0); burst.CheckTimeout(41);
         Assert.False(burst.Active); Assert.Contains("gap", burst.Message);
-        burst.Start(new(90), 100); burst.Add(100, default, default);
+        burst.Start(null, 100); burst.Add(100, default, default);
         Assert.Null(burst.Add(141, default, default)); Assert.False(burst.Active);
-        burst.Start(new(90), 200); burst.Add(200, default, default);
+        burst.Start(null, 200); burst.Add(200, default, default);
         Assert.NotNull(burst.Add(210, default, default));
-        var countLimited = Burst(Settings with { MinSamplesPerCapture = 100 }); countLimited.Start(new(90), 0);
+        var countLimited = Burst(Settings with { MinSamplesPerCapture = 100 }); countLimited.Start(null, 0);
         foreach (int t in new[] { 0, 30, 60, 90, 101 }) Assert.Null(countLimited.Add(t, default, default));
         Assert.Contains("timed out", countLimited.Message); Assert.False(countLimited.Active);
     }
@@ -143,7 +144,7 @@ public class CaptureTests
     [InlineData(1, 1, true)]
     public void PositionStabilityConvertsEachAxisToMillimeters(int axis, int displacement, bool accepted)
     {
-        var burst = Burst(Settings with { PositionStabilityMm = 0.02 }); burst.Start(new(90), 0);
+        var burst = Burst(Settings with { PositionStabilityMm = 0.02 }); burst.Start(null, 0);
         burst.Add(0, axis == 0 ? new(-displacement, 0) : new(0, -displacement), default);
         var result = burst.Add(10, axis == 0 ? new(displacement, 0) : new(0, displacement), default);
         Assert.Equal(accepted, result != null);
@@ -155,7 +156,7 @@ public class CaptureTests
     [InlineData(21, 2, false)]
     public void NearestRank95PercentileDoesNotTrimSamples(int count, int outliers, bool accepted)
     {
-        var burst = Burst(Settings with { MinSamplesPerCapture = count }); burst.Start(new(90), 0);
+        var burst = Burst(Settings with { MinSamplesPerCapture = count }); burst.Start(null, 0);
         CalibrationSample? result = null;
         for (int i = 0; i < count; i++) result = burst.Add(i, i < outliers ? new(1000, 0) : default, default);
         Assert.Equal(accepted, result != null);
@@ -165,45 +166,29 @@ public class CaptureTests
     [Fact]
     public void TiltStabilityUsesRawEuclideanDegreesAndNonfiniteReadingsFail()
     {
-        var burst = Burst(Settings with { AngleToleranceDeg = 10 }); burst.Start(new(90), 0);
-        // The conversion suppresses azimuth near upright; both reports are individually in tolerance.
+        var burst = Burst(Settings with { TiltTolerance = 10 }); burst.Start(null, 0);
+        // The reference burst has no pose gate; stability still uses every raw report.
         burst.Add(0, default, new(-2, -2)); Assert.Null(burst.Add(10, default, new(2, 2)));
         Assert.Contains("Movement", burst.Message);
-        burst.Start(new(90), 20); Assert.Null(burst.Add(20, new(double.NaN, 0), default));
+        burst.Start(null, 20); Assert.Null(burst.Add(20, new(double.NaN, 0), default));
         Assert.False(burst.Active);
-    }
-
-    [Theory]
-    [InlineData(45, 0, 45, 0)]
-    [InlineData(-45, 0, 45, 180)]
-    [InlineData(0, 45, 45, 90)]
-    [InlineData(0, -45, 45, 270)]
-    [InlineData(35.264389682754654, 35.264389682754654, 45, 45)]
-    public void HuionProjectionMatchesVerifiedDirectionsAndIndependentDiagonalMath(double x, double y, double altitude, double azimuth)
-    {
-        var angle = Orientation(new(x, y));
-        Assert.Equal(altitude, angle.AltitudeDeg, 8); Assert.Equal(azimuth, angle.AzimuthDeg!.Value, 8);
-        Assert.Throws<CalibrationException>(() => Orientation(new(90, 0)));
     }
 
     private static void Fill(CaptureDraft draft, Point2 offset = default)
     {
         while (!draft.Complete)
         {
-            var pose = draft.CurrentPose;
-            double magnitude = Math.Tan((90 - pose.AltitudeDeg) * Math.PI / 180), azimuth = (pose.AzimuthDeg ?? 0) * Math.PI / 180;
-            var tilt = new Point2(Math.Atan(magnitude * Math.Cos(azimuth)) * 180 / Math.PI,
-                Math.Atan(magnitude * Math.Sin(azimuth)) * 180 / Math.PI);
+            var tilt = draft.RequestedTilt ?? default;
             draft.Store(new(draft.CurrentTarget + offset, tilt));
         }
     }
 
     [Theory]
-    [InlineData(0.06, 0.08, false)]
-    [InlineData(0.101, 0, true)]
-    public void CaptureSeparationUsesMeasuredTiltAndRejectsTheMinimumBoundary(double x, double y, bool accepted)
+    [InlineData(0, 0, false)]
+    [InlineData(0.0001, 0, true)]
+    public void CaptureNeedsDistinctValuesWithoutAssumingATiltUnitScale(double x, double y, bool accepted)
     {
-        var draft = new CaptureDraft(Settings with { AzimuthCount = 4, NonUprightAltitudeCount = 1 }, Geometry);
+        var draft = new CaptureDraft(Settings with { TiltDirections = 4, TiltLevels = 1 }, Geometry);
         draft.Store(new(draft.CurrentTarget, default));
         var sample = new CalibrationSample(draft.CurrentTarget, new(x, y));
         if (accepted) draft.Store(sample);
@@ -237,7 +222,7 @@ public class CaptureTests
     [Fact]
     public void NodeRecapturePreservesOtherNodesAndRebuildsAUsableMeasuredMesh()
     {
-        var settings = Settings with { AzimuthCount = 4, NonUprightAltitudeCount = 1 };
+        var settings = Settings with { TiltDirections = 4, TiltLevels = 1 };
         var original = new CaptureDraft(settings, Geometry); Fill(original);
         var draft = original.Recapture(7, true);
         Assert.Equal(5, draft.CurrentIndex); Assert.Equal(original.Total - 5, draft.CapturedCount);
@@ -256,9 +241,9 @@ public class CaptureTests
         draft.Store(new(draft.CurrentTarget, default)); draft.Store(new(draft.CurrentTarget, default));
         draft.Previous(); Assert.Equal(1, draft.CurrentIndex); draft.Previous(); Assert.Equal(0, draft.CurrentIndex);
         draft.Store(new(draft.CurrentTarget + new Point2(3, 0), default)); Assert.Equal(2, draft.CapturedCount);
-        var tiltDraft = new CaptureDraft(Settings with { AzimuthCount = 4, NonUprightAltitudeCount = 1 }, Geometry);
+        var tiltDraft = new CaptureDraft(Settings with { TiltDirections = 4, TiltLevels = 1 }, Geometry);
         tiltDraft.Store(new(tiltDraft.CurrentTarget, default));
-        Assert.Throws<CalibrationException>(() => tiltDraft.Store(new(tiltDraft.CurrentTarget, new(0.05, 0))));
+        Assert.Throws<CalibrationException>(() => tiltDraft.Store(new(tiltDraft.CurrentTarget, default)));
         Assert.Equal(1, tiltDraft.CapturedCount); Assert.Equal(1, tiltDraft.CurrentIndex);
         Assert.Throws<CalibrationException>(() => tiltDraft.ToData());
     }
@@ -269,7 +254,7 @@ public class CaptureTests
     [Fact]
     public void ControllerIgnoresAuxiliaryReportsAndNeverCapturesFromPressureOrStaleTilt()
     {
-        var draft = new CaptureDraft(Settings, Geometry); var capture = new CaptureController(draft, Orientation);
+        var draft = new CaptureDraft(Settings, Geometry); var capture = new CaptureController(draft);
         capture.Read(Reading(0, pressure: 1000)); Assert.Equal(0, draft.CapturedCount);
         capture.Start(1); capture.Read(Reading(0, ReadingKind.Rejected)); // Queued before Space.
         capture.Read(Reading(1)); capture.Read(Reading(6, ReadingKind.Auxiliary)); capture.Read(Reading(11));
@@ -288,7 +273,7 @@ public class CaptureTests
     public async Task AcquisitionDeliversEveryMatchedReportToCaptureWithoutUiSampling()
     {
         var daemon = new FakeDaemon(); var draft = new CaptureDraft(Settings, Geometry);
-        var capture = new CaptureController(draft, Orientation); var acquisition = new AcquisitionSession(daemon, daemon.Tablet);
+        var capture = new CaptureController(draft); var acquisition = new AcquisitionSession(daemon, daemon.Tablet);
         var received = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         int count = 0;
         acquisition.Reading += r => { capture.Read(r); if (Interlocked.Increment(ref count) == 2) received.TrySetResult(); };
@@ -316,36 +301,35 @@ public class CaptureTests
         pen.NearProximity = true; pen.Tilt = new(float.NaN, 0);
         Assert.Equal(ReadingKind.Rejected, ReportReadingFactory.Read(pen, 3).Kind);
         Assert.Equal(ReadingKind.Rejected, ReportReadingFactory.Read(new OutOfRangeReport([]), 4).Kind);
-        Assert.Equal(ReadingKind.Rejected, ReportReadingFactory.Read(new TabletReport { Raw = [] }, 5).Kind);
+        Assert.Equal(ReadingKind.Paired, ReportReadingFactory.Read(new TabletReport { Raw = [] }, 5).Kind);
         Assert.Equal(ReadingKind.Auxiliary, ReportReadingFactory.Read(new AuxReport { Raw = [] }, 6).Kind);
     }
 
     [Fact]
-    public void UnsupportedTabletOrReportNeverAssumesHuionOrientation()
+    public void AnyPositionReportCanCaptureWithoutAModelOrParserWhitelist()
     {
-        var tablet = IntegrationTests.Tablet(); Assert.False(CaptureDevice.Supported(tablet));
-        tablet.Properties.Name = "Huion Kamvas 13 (Gen 3)"; Assert.False(CaptureDevice.Supported(tablet));
-        tablet.Identifiers.First().ReportParser = typeof(OpenTabletDriver.Configurations.Parsers.Huion.GianoReportParser).FullName!;
-        Assert.True(CaptureDevice.Supported(tablet));
-        var draft = new CaptureDraft(Settings, Geometry);
-        var controller = new CaptureController(draft, Orientation, CaptureDevice.ReportType);
-        controller.Start(0); controller.Read(Reading(0)); controller.Read(Reading(10));
-        Assert.Equal(0, draft.CapturedCount); Assert.Contains("not verified", controller.Snapshot(10).Message);
+        var draft = new CaptureDraft(Settings with { TiltDirections = 4, TiltLevels = 1 }, Geometry);
+        var controller = new CaptureController(draft);
+        controller.Read(Reading(0) with { Tilt = null });
+        Assert.False(draft.UsesTilt); Assert.Equal(4, draft.Total);
+        controller.Start(0);
+        controller.Read(Reading(0) with { Tilt = null });
+        controller.Read(Reading(10) with { Tilt = null });
+        Assert.Equal(1, draft.CapturedCount);
+        Assert.Equal(default, draft.Sample(0)!.Tilt);
     }
 
     [Fact]
     public void FullTiltCaptureProducesAcceptedJsonUsableByTheRuntimeEvaluator()
     {
         var workspace = new CalibrationWorkspace();
-        workspace.Begin(Settings with { AzimuthCount = 4, NonUprightAltitudeCount = 2 }, Geometry);
-        var draft = workspace.Session!; var controller = new CaptureController(draft, Orientation);
+        workspace.Begin(Settings with { TiltDirections = 4, TiltLevels = 2 }, Geometry);
+        var draft = workspace.Session!; var controller = new CaptureController(draft);
         double time = 0;
         while (!draft.Complete)
         {
-            var pose = draft.CurrentPose;
-            double radius = Math.Tan((90 - pose.AltitudeDeg) * Math.PI / 180), azimuth = (pose.AzimuthDeg ?? 0) * Math.PI / 180;
-            var tilt = new Vector2((float)(Math.Atan(radius * Math.Cos(azimuth)) * 180 / Math.PI),
-                (float)(Math.Atan(radius * Math.Sin(azimuth)) * 180 / Math.PI));
+            var requested = draft.RequestedTilt ?? new Point2(5, -10);
+            var tilt = new Vector2((float)requested.X, (float)requested.Y);
             var target = draft.CurrentTarget;
             var position = new Vector2((float)target.X + 2, (float)target.Y - 3);
             Assert.True(controller.Start(time));
@@ -362,12 +346,12 @@ public class CaptureTests
     }
 
     [Fact]
-    public void PoseReplacementDoesNotAdvanceOnAnInvalidHull()
+    public void PoseReplacementDoesNotAdvanceOnADuplicateTilt()
     {
-        var draft = new CaptureDraft(Settings with { AzimuthCount = 4, NonUprightAltitudeCount = 1 }, Geometry); Fill(draft);
+        var draft = new CaptureDraft(Settings with { TiltDirections = 4, TiltLevels = 1 }, Geometry); Fill(draft);
         var replacement = draft.Recapture(4, false);
         replacement.Previous(); Assert.Equal(4, replacement.CurrentIndex);
-        Assert.Throws<CalibrationException>(() => replacement.Store(new(replacement.CurrentTarget, new(20, 20))));
+        Assert.Throws<CalibrationException>(() => replacement.Store(new(replacement.CurrentTarget, default)));
         Assert.False(replacement.Complete); Assert.Null(replacement.Sample(4)); Assert.NotNull(draft.Sample(4));
         Fill(replacement); Assert.NotNull(replacement.ToData());
     }
@@ -386,16 +370,16 @@ public class CaptureTests
     {
         Assert.Throws<CalibrationException>(() => new CaptureDraft(Settings with { RowCount = int.MaxValue }, Geometry));
         Assert.Throws<CalibrationException>(() => (Settings with { RowCount = 100, ColumnCount = 101 }).Validate());
-        Assert.Throws<CalibrationException>(() => (Settings with { AngleToleranceDeg = 90 }).Validate());
+        Assert.Throws<CalibrationException>(() => (Settings with { TiltTolerance = double.NaN }).Validate());
     }
 
     [Fact]
     public void TimeoutBoundaryAndStabilityBoundaryAreInclusive()
     {
-        var burst = Burst(Settings with { CaptureWindowMs = 40 }); burst.Start(new(90), 0);
+        var burst = Burst(Settings with { CaptureWindowMs = 40 }); burst.Start(null, 0);
         burst.Add(0, default, default);
         Assert.NotNull(burst.Add(40, default, default));
-        var stable = Burst(); stable.Start(new(90), 0); stable.Add(0, default, new(-2, 0));
+        var stable = Burst(); stable.Start(null, 0); stable.Add(0, default, new(-2, 0));
         Assert.NotNull(stable.Add(10, default, new(2, 0))); // Exactly 2 degrees of tilt stability.
     }
 

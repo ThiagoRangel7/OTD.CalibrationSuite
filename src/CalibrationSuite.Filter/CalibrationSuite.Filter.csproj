@@ -12,6 +12,7 @@
     <FilterPackageInput Include="$(MSBuildProjectDirectory)/bin/$(Configuration)/$(TargetFramework)/CalibrationSuite.Core.pdb" Condition="'$(Configuration)' == 'Debug'" />
     <FilterPackageInput Include="$(MSBuildProjectDirectory)/../../packaging/metadata.json" />
     <FilterPackageInput Include="$(MSBuildProjectDirectory)/../../packaging/NOTICE.txt" />
+    <FilterPackageInput Include="$(MSBuildProjectDirectory)/../../LICENSE" />
     <FilterPackageInput Include="$(MSBuildProjectDirectory)/../../packaging/NetTopologySuite.LICENSE.md" />
     <FilterPackageInput Include="$(MSBuildProjectDirectory)/../../scripts/Package-Filter.ps1" />
     <FilterPackageInput Include="$(MSBuildProjectFullPath)" />

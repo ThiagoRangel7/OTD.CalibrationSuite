@@ -1,28 +1,17 @@
 namespace CalibrationSuite.Core;
 
-// Visual coordinates are X right and Y down the display. The top view reverses
-// the existing tip-to-eraser convention so the arrow continues through the nib.
+// A plot of reported tilt, not a physical pen-angle projection. X right, Y up.
 public static class OrientationScene
 {
-    public static Point2 ArrowTip(RequestedPose pose) => PointAt(Radius(pose.AltitudeDeg), pose.AzimuthDeg ?? 0);
+    public static Point2 ArrowTip(Point2 offset, double scale) => new(offset.X / scale, -offset.Y / scale);
 
     public static Point2 PointAt(double radius, double azimuthDeg)
     {
         double azimuth = azimuthDeg * Math.PI / 180;
-        return new(radius * Math.Cos(azimuth), -radius * Math.Sin(azimuth));
+        return new(radius * Math.Cos(azimuth), radius * Math.Sin(azimuth));
     }
 
-    public static OrientationTarget TargetSpace(RequestedPose requested, double toleranceDeg) => new(
-        Radius(Math.Min(90, requested.AltitudeDeg + toleranceDeg)),
-        Radius(Math.Max(0, requested.AltitudeDeg - toleranceDeg)),
-        requested.AzimuthDeg, toleranceDeg);
-
-    private static double Radius(double altitudeDeg) => altitudeDeg >= 90 ? 0 : Math.Cos(altitudeDeg * Math.PI / 180);
 }
-
-// These are the exact altitude and circular-azimuth gate bounds projected into
-// the top view, rather than an enlarged decorative circle around an ideal pose.
-public readonly record struct OrientationTarget(double InnerRadius, double OuterRadius, double? AzimuthDeg, double ToleranceDeg);
 
 public readonly record struct OverlayBounds(double Left, double Top, double Width, double Height)
 {

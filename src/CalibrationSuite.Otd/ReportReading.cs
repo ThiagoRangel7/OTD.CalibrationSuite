@@ -31,11 +31,10 @@ public static class ReportReadingFactory
             OutOfRangeReport => (ReadingKind.Rejected, "Out of range"),
             IProximityReport { NearProximity: false } => (ReadingKind.Rejected, "Proximity lost"),
             IEraserReport { Eraser: true } => (ReadingKind.Rejected, "Eraser — nib calibration unavailable"),
-            _ when position == null && tilt == null => (ReadingKind.Auxiliary, "Auxiliary report — no paired position/tilt"),
+            _ when position == null && tilt == null => (ReadingKind.Auxiliary, "Auxiliary report — no pen position"),
             _ when position == null => (ReadingKind.Rejected, "Unsupported pen report — position missing"),
-            _ when tilt == null => (ReadingKind.Rejected, "Unsupported pen report — tilt missing"),
-            _ when !PreviewGeometry.Finite(position.Value) || !PreviewGeometry.Finite(tilt.Value) => (ReadingKind.Rejected, "Nonfinite pen reading"),
-            _ => (ReadingKind.Paired, "Paired raw pen reading")
+            _ when !PreviewGeometry.Finite(position.Value) || tilt is { } value && !PreviewGeometry.Finite(value) => (ReadingKind.Rejected, "Nonfinite pen reading"),
+            _ => (ReadingKind.Paired, tilt == null ? "Raw pen position — no tilt reported" : "Raw pen position and tilt")
         };
         return new(timestamp, position, tilt, pressure, status, kind, report.GetType().FullName);
     }

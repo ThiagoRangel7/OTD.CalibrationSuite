@@ -66,9 +66,9 @@ internal static class Program
         }
         foreach (var (message, name) in new[]
         {
-            ("Measured tilt hull must strictly surround (0, 0); recapture missing directions.", "coverage"),
-            ("Measured tilt is within 0.1° of another pose. Recapture with distinct orientations.", "overlap"),
-            ("Tilt is outside the supported signed angular range (-90, 90).", "range")
+            ("Tilt mesh does not retain every distinct sample; recapture unusable or collinear coverage.", "coverage"),
+            ("Duplicate measured tilt. Recapture with distinct reported values.", "overlap"),
+            ("Tilt missing from pen report.", "range")
         })
         {
             var view = new CaptureView(Settings, Geometry, "Synthetic failure");
@@ -76,22 +76,33 @@ internal static class Program
             Save(view, 640, 360, 2, "capture-small-retry-" + name); CheckCaptureBounds(view, State(CaptureCue.Retry).Target);
         }
         var gallery = new UniformGrid { Rows = 3, Columns = 3, Background = Brush("#1C2A3D") };
-        foreach (var pose in new[] { new RequestedPose(90), new(50, 0), new(50, 90), new(50, 180), new(50, 270), new(50, 45), new(50, 135), new(50, 225), new(50, 315) })
+        foreach (var pose in new[] { new RequestedPose(0), new(40, 0), new(40, 90), new(40, 180), new(40, 270), new(40, 45), new(40, 135), new(40, 225), new(40, 315) })
         {
             var cell = new DockPanel { Margin = new(12) };
-            var title = new TextBlock { Text = pose.AzimuthDeg is { } a ? $"50° altitude · {a:F0}° azimuth (eraser)" : "Upright", Foreground = Brushes.White, FontSize = 15 };
+            var title = new TextBlock { Text = pose.DirectionDeg is { } a ? $"Reported offset · {a:F0}° direction" : "Reference", Foreground = Brushes.White, FontSize = 15 };
             DockPanel.SetDock(title, Dock.Top); cell.Children.Add(title);
-            var guide = new OrientationGuide(); guide.Place(new(168, 109), 94); guide.Update(pose, pose, 3, CaptureCue.Ready, 0);
+            var guide = new OrientationGuide(); guide.Place(new(168, 109), 94); guide.Update(pose.Offset, pose.Offset, 3, 48, CaptureCue.Ready, 0);
             cell.Children.Add(guide); gallery.Children.Add(cell);
         }
         Save(gallery, 1080, 780, 1, "orientation-gallery");
         CheckTargetSpace();
+        foreach (bool positionOnly in new[] { false, true })
+        {
+            var view = new CaptureView(Settings, Geometry, "Synthetic first measurement");
+            var state = State(CaptureCue.Ready) with { UsesTilt = !positionOnly, ReportsTilt = !positionOnly, RequestedTilt = null, ReferenceTilt = null,
+                Index = 0, Captured = 0, Total = positionOnly ? 9 : 153, Pose = new(0), Target = new(10000, 5000) };
+            view.Update(state, Reading(new(5, -10)) with { Tilt = positionOnly ? null : new Vector2(5, -10) }, 1000);
+            Save(view, 640, 360, 2, positionOnly ? "capture-position-only" : "capture-reference");
+            CheckCaptureBounds(view, state.Target);
+            if (positionOnly && !Descendants(view).OfType<TextBlock>().Any(t => t.Text == "OTD reports no tilt · tilt blocked"))
+                throw new InvalidOperationException("Position-only capture must explain why tilt is blocked.");
+        }
         CheckStableGuide();
         CheckLocalFeedback();
         CheckReusedCaptureLayout();
 
         var workspace = new CalibrationWorkspace();
-        workspace.Begin(new() { RowCount = 2, ColumnCount = 2, AzimuthCount = 0 }, Geometry);
+        workspace.Begin(new() { RowCount = 2, ColumnCount = 2, TiltDirections = 0 }, Geometry);
         while (!workspace.Session!.Complete) workspace.Session.Store(new(workspace.Session.CurrentTarget, default));
         workspace.Finish();
         var review = new ReviewWindow(workspace);
@@ -123,13 +134,14 @@ internal static class Program
         app.Shutdown();
     }
 
-    private static CaptureProgress State(CaptureCue cue) => new(1, 1, 153, new(3276.8, 5461.3), new(70, 0), cue == CaptureCue.Capturing, 12, false,
+    private static CaptureProgress State(CaptureCue cue) => new(1, 1, 153, new(3276.8, 5461.3), new(20, 0), cue == CaptureCue.Capturing, 12, false,
         cue == CaptureCue.Retry ? "Pose left the angle tolerance — hold the requested pose and retry." : "")
     {
         BurstStatus = cue == CaptureCue.Capturing ? CaptureBurstStatus.Capturing : cue == CaptureCue.Retry ? CaptureBurstStatus.Retry : CaptureBurstStatus.Idle,
+        UsesTilt = true, ReferenceTilt = default(Point2), RequestedTilt = new(20, 0),
         BurstProgress = 0.6, BurstDurationMs = 150, AcceptedAtMs = cue == CaptureCue.Accepted ? 990 : null, AcceptedIndex = cue == CaptureCue.Accepted ? 0 : null
     };
-    private static ReportReading Reading(Vector2 tilt) => new(Stopwatch.GetTimestamp(), new(3275, 5462), tilt, 0, "Paired raw pen reading", ReportType: CaptureDevice.ReportType);
+    private static ReportReading Reading(Vector2 tilt) => new(Stopwatch.GetTimestamp(), new(3275, 5462), tilt, 0, "Paired raw pen reading", ReportType: typeof(OpenTabletDriver.Plugin.Tablet.TiltTabletReport).FullName);
     private static SolidColorBrush Brush(string color) => new((Color)ColorConverter.ConvertFromString(color));
 
     private static void Save(FrameworkElement content, int width, int height, double scale, string name)
@@ -218,34 +230,27 @@ internal static class Program
 
     private static void CheckTargetSpace()
     {
-        foreach (var (requested, tolerance, name) in new[]
+        foreach (var target in new Point2[] { default, new(20, 0), new(0, 20), new(-20, -20) })
+        foreach (double tolerance in new[] { 0.25, 3, 8 })
         {
-            (new RequestedPose(90), 0.25, "upright-tight"), (new RequestedPose(90), 3d, "upright"),
-            (new RequestedPose(70, 0), 0.25, "tilt-tight"), (new RequestedPose(70, 0), 3d, "tilt"),
-            (new RequestedPose(70, 90), 3d, "tilt-up"), (new RequestedPose(70, 359), 3d, "tilt-wrap"),
-            (new RequestedPose(50, 45), 12d, "tilt-wide-diagonal")
-        })
-        {
+            const double scale = 48;
             var guide = new OrientationGuide(); guide.Place(new(220, 220), 200);
-            guide.Update(requested, requested, tolerance, CaptureCue.Ready, 0);
+            guide.Update(target, target, tolerance, scale, CaptureCue.Ready, 0);
             var host = new Grid { Background = Brush("#101A28") }; host.Children.Add(guide);
-            Save(host, 440, 440, 2, "precision-" + name); CheckPrecision(guide);
+            Save(host, 440, 440, 2, $"precision-{target.X}-{target.Y}-{tolerance}"); CheckPrecision(guide);
             var drawn = (Geometry)typeof(OrientationGuide).GetField("outline", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(guide)!;
-            // Flatten after the placement transform with a subpixel absolute tolerance.
-            // Hit testing a transformed unit arc directly uses a coarser native approximation.
             var outline = drawn.GetFlattenedPathGeometry(0.00001, ToleranceType.Absolute);
-            foreach (double altitude in new[] { Math.Max(0.01, requested.AltitudeDeg - tolerance - 0.05), requested.AltitudeDeg - tolerance + 0.01,
-                requested.AltitudeDeg, Math.Min(90, requested.AltitudeDeg + tolerance - 0.01), Math.Min(90, requested.AltitudeDeg + tolerance + 0.05) })
-                foreach (double delta in new[] { -tolerance - 0.05, -tolerance + 0.01, 0, tolerance - 0.01, tolerance + 0.05, 180 })
-                {
-                    var current = new RequestedPose(altitude, ((requested.AzimuthDeg ?? 0) + delta + 360) % 360);
-                    var tip = OrientationScene.ArrowTip(current) * guide.Radius + guide.Anchor;
-                    bool inside = outline.FillContains(new Point(tip.X, tip.Y), 0.000001, ToleranceType.Absolute);
-                    if (inside != OrientationGuidance.WithinTolerance(current, requested, tolerance))
-                        throw new InvalidOperationException($"Drawn target disagrees with capture gate: {name}, {current}.");
-                }
+            foreach (double distance in new[] { 0, tolerance - 0.01, tolerance + 0.01 })
+            foreach (double direction in new[] { 0d, 45, 90, 180, 270 })
+            {
+                var current = target + OrientationScene.PointAt(distance, direction);
+                var tip = OrientationScene.ArrowTip(current, scale) * guide.Radius + guide.Anchor;
+                bool inside = outline.FillContains(new Point(tip.X, tip.Y), 0.000001, ToleranceType.Absolute);
+                if (inside != OrientationGuidance.WithinTolerance(current, target, tolerance))
+                    throw new InvalidOperationException($"Drawn target disagrees with reported-tilt capture gate: {target}, {current}.");
+            }
         }
-        Console.WriteLine("Native target outlines match altitude/azimuth gates, including tight tolerance, upright, diagonals, and 360° wrap.");
+        Console.WriteLine("Native reported-tilt circles match the sampling gate, including tight tolerances and all directions.");
     }
 
     private static void CheckStableGuide()
@@ -327,7 +332,7 @@ internal static class Program
         foreach (var rawTilt in new[] { Vector2.Zero, new(20, 0), new(-20, 0), new(0, 20), new(0, -20), new(15, 15), new(-15, 15), new(15, -15), new(-15, -15) })
         {
             var view = new CaptureView(Settings, Geometry, "Synthetic local feedback placement");
-            var state = State(CaptureCue.Ready) with { Target = target, Pose = CaptureDevice.Orientation(new(rawTilt.X, rawTilt.Y), 0) };
+            var state = State(CaptureCue.Ready) with { Target = target, RequestedTilt = new(rawTilt.X, rawTilt.Y) };
             view.Update(state, Reading(rawTilt), 1000);
             view.Measure(new(640, 360)); view.Arrange(new(0, 0, 640, 360)); view.UpdateLayout();
             CheckCaptureBounds(view, target);
@@ -337,15 +342,15 @@ internal static class Program
 
         foreach (double tolerance in new[] { 0.25, 3, 12, 80 })
         {
-            var view = new CaptureView(Settings with { AzimuthCount = 0, AngleToleranceDeg = tolerance }, Geometry, "Synthetic upright tolerance");
-            var state = State(CaptureCue.Ready) with { Target = new(10000, 5000), Pose = new(90) };
+            var view = new CaptureView(Settings with { TiltDirections = 0, TiltTolerance = tolerance }, Geometry, "Synthetic upright tolerance");
+            var state = State(CaptureCue.Ready) with { Target = new(10000, 5000), Pose = new(0), UsesTilt = false, RequestedTilt = null };
             view.Update(state, Reading(default), 1000);
             Save(view, 640, 360, 2, $"capture-upright-tolerance-{tolerance:F2}"); CheckCaptureBounds(view, state.Target);
         }
 
         // A success cue identifies the completed pose; the next pose keeps its own gate/color.
         var next = new CaptureView(Settings, Geometry, "Synthetic next-pose transition");
-        var nextState = State(CaptureCue.Accepted) with { Target = new(10000, 5000), Pose = new(70, 90) };
+        var nextState = State(CaptureCue.Accepted) with { Target = new(10000, 5000), Pose = new(20, 90), RequestedTilt = new(0, 20) };
         next.Update(nextState, Reading(new(20, 0)), 1000);
         Save(next, 640, 360, 2, "capture-next-pose-success"); CheckCaptureBounds(next, nextState.Target);
         var local = Descendants(next).OfType<StackPanel>().Single(p => p.Name == "CrosshairFeedback");
@@ -360,9 +365,9 @@ internal static class Program
 
     private static void CheckInput()
     {
-        var settings = new CaptureSettings { RowCount = 2, ColumnCount = 2, AzimuthCount = 0, CaptureWindowMs = 10, MinSamplesPerCapture = 2 };
+        var settings = new CaptureSettings { RowCount = 2, ColumnCount = 2, TiltDirections = 0, CaptureWindowMs = 10, MinSamplesPerCapture = 2 };
         var draft = new CaptureDraft(settings, Geometry);
-        var controller = new CaptureController(draft, tilt => CaptureDevice.Orientation(tilt, 3), CaptureDevice.ReportType);
+        var controller = new CaptureController(draft);
         var acquisition = new AcquisitionSession(new DaemonConnection("CalibrationSuite.VisualChecks.Unused"), new());
         var window = new CaptureWindow(acquisition, controller, draft, "Synthetic keyboard input", new(0, 0, 1, 1));
         var source = new DetachedSource();

@@ -74,7 +74,7 @@ public sealed class MainWindow : Window
 
     private void Refresh()
     {
-        bool ready = readyTablet != null && CaptureDevice.Supported(readyTablet) && !running && !restartRequired;
+        bool ready = readyTablet != null && !running && !restartRequired;
         settings.IsEnabled = !running; start.IsEnabled = false;
         try
         {
@@ -82,7 +82,7 @@ public sealed class MainWindow : Window
             int poses = value.PoseCount;
             int count = value.TotalCaptures;
             total.Foreground = Ui.Ink;
-            total.Text = $"{count} captures  ·  {value.RowCount} × {value.ColumnCount} targets  ·  {poses} poses each";
+            total.Text = $"Up to {count} captures  ·  {value.RowCount} × {value.ColumnCount} targets  ·  {poses} poses each";
             start.IsEnabled = ready;
         }
         catch (CalibrationException)
@@ -109,11 +109,9 @@ public sealed class MainWindow : Window
                     if (!running && !lifetime.IsCancellationRequested)
                     {
                         readyTablet = tablet;
-                        bool supported = CaptureDevice.Supported(tablet);
-                        tabletName.Text = (supported ? "● Ready · " : "! Unavailable · ") + tablet.Properties.Name;
-                        tabletName.Foreground = supported ? Ui.Ink : Ui.Error;
-                        tabletDetail.Text = supported ? "Verified tilt directions · check physical angles during first-use review."
-                            : "Capture orientation has not been verified for this tablet/parser.";
+                        tabletName.Text = "● Ready · " + tablet.Properties.Name;
+                        tabletName.Foreground = Ui.Ink;
+                        tabletDetail.Text = "Display tablet · full-area mapping. No reported tilt: upright positions only.";
                     }
                 }
                 catch (Exception ex)
@@ -146,7 +144,6 @@ public sealed class MainWindow : Window
         {
             var tablet = TabletSelection.Single(await daemon.GetTablets().WaitAsync(TimeSpan.FromSeconds(3), lifetime.Token));
             lifetime.Token.ThrowIfCancellationRequested();
-            if (!CaptureDevice.Supported(tablet)) throw new CalibrationException("Orientation guidance is not verified for this tablet/parser.");
             var geometry = CaptureDevice.Geometry(tablet);
             var display = DisplayGeometry.ForWindow(this);
             if (newCapture) workspace.Begin(settings.Read(), geometry);
@@ -154,7 +151,7 @@ public sealed class MainWindow : Window
             if (!draft.Geometry.Matches(geometry)) throw new CalibrationException("Tablet geometry changed. Start a new calibration.");
             if (!draft.Complete)
             {
-                controller = new(draft, tilt => CaptureDevice.Orientation(tilt, draft.Settings.AngleToleranceDeg), CaptureDevice.ReportType);
+                controller = new(draft);
                 acquisition = new(daemon, tablet);
                 acquisition.Reading += controller.Read;
                 window = new(acquisition, controller, draft, tablet.Properties.Name, display) { Owner = this };

@@ -3,12 +3,17 @@ namespace CalibrationSuite.Core;
 public sealed class CaptureDraft
 {
     private readonly CalibrationGrid grid;
-    private readonly CalibrationSample?[] samples;
-    private readonly int firstIndex, endIndex;
+    private CalibrationSample?[] samples;
+    private readonly int firstIndex;
+    private int endIndex;
     private int cursor;
-    public CaptureSettings Settings { get; }
+    public CaptureSettings Settings { get; private set; }
     public SourceGeometry Geometry { get; }
-    public IReadOnlyList<RequestedPose> Poses { get; }
+    public IReadOnlyList<RequestedPose> Poses { get; private set; }
+    public bool UsesTilt => Poses.Count > 1;
+    public Point2? ReferenceTilt => samples[CurrentIndex / Poses.Count * Poses.Count]?.Tilt;
+    public Point2? RequestedTilt => UsesTilt && CurrentIndex % Poses.Count != 0 && ReferenceTilt is { } reference
+        ? reference + CurrentPose.Offset : null;
     public int Total => samples.Length;
     public int CapturedCount { get; private set; }
     public bool Complete => cursor == endIndex;
@@ -42,6 +47,16 @@ public sealed class CaptureDraft
     public Point2 Target(int index) => new(grid.PreTransformColumnCoordinates[index / Poses.Count % Settings.ColumnCount],
         grid.PreTransformRowCoordinates[index / Poses.Count / Settings.ColumnCount]);
     public CalibrationSample? Sample(int index) => samples[index];
+
+    // Resolve report capability before the first measurement; retain all other settings.
+    public void UsePositionOnly()
+    {
+        if (!UsesTilt || CapturedCount != 0) return;
+        Settings = Settings with { TiltDirections = 0, TiltLevels = 0 };
+        Poses = Array.AsReadOnly(Settings.CreatePoses());
+        samples = new CalibrationSample?[Settings.TotalCaptures];
+        endIndex = samples.Length;
+    }
 
     public CaptureDraft Recapture(int index, bool wholeNode)
     {
@@ -78,8 +93,8 @@ public sealed class CaptureDraft
         for (int i = nodeStart; i < nodeStart + Poses.Count; i++)
         {
             if (i == index || samples[i] is not { } existing) continue;
-            if (!NodeMesh.CaptureTiltsSeparated(existing.Tilt, sample.Tilt))
-                throw new CalibrationException("Measured tilt is within 0.1° of another pose. Recapture with distinct orientations.");
+            if (existing.Tilt == sample.Tilt)
+                throw new CalibrationException("Duplicate measured tilt. Recapture with distinct reported values.");
             capturedInNode++;
         }
 
@@ -89,7 +104,7 @@ public sealed class CaptureDraft
             var node = new CalibrationSample[Poses.Count];
             Array.Copy(samples, nodeStart, node, 0, node.Length);
             node[index % Poses.Count] = sample;
-            NodeMesh.Prepare(node, CurrentTarget, node[0].Tilt);
+            NodeMesh.Prepare(node, CurrentTarget);
         }
 
         // Commit only after every validation succeeds; failed replacements preserve the old sample.

@@ -9,6 +9,7 @@ $files = @(
     "src/CalibrationSuite.Filter/bin/$Configuration/net8.0/NetTopologySuite.dll",
     'packaging/metadata.json',
     'packaging/NOTICE.txt',
+    'LICENSE',
     'packaging/NetTopologySuite.LICENSE.md'
 )
 if ($Configuration -eq 'Debug') {

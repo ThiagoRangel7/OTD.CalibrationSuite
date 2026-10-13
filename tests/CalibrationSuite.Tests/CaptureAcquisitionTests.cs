@@ -13,7 +13,7 @@ public class CaptureAcquisitionTests
     {
         RowCount = 2,
         ColumnCount = 2,
-        AzimuthCount = 0,
+        TiltDirections = 0,
         CaptureWindowMs = 10,
         MinSamplesPerCapture = 2
     };
@@ -38,7 +38,7 @@ public class CaptureAcquisitionTests
     {
         var daemon = Daemon();
         var draft = Draft(daemon);
-        var controller = new CaptureController(draft, tilt => CaptureDevice.Orientation(tilt, Settings.AngleToleranceDeg), CaptureDevice.ReportType);
+        var controller = new CaptureController(draft);
         var acquisition = new AcquisitionSession(daemon, daemon.Tablet);
         acquisition.Reading += controller.Read;
         var run = acquisition.RunAsync();

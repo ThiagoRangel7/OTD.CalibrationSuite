@@ -50,7 +50,8 @@ public sealed class CaptureWindow : Window
     }
 
     private static void Ignore(object? sender, InputEventArgs e) => e.Handled = true;
-    internal static string Pose(RequestedPose value) => $"altitude {value.AltitudeDeg:F1}° · azimuth {(value.AzimuthDeg is { } a ? $"{a:F1}°" : "— (upright)")}";
+    internal static string Pose(RequestedPose value) => value.Magnitude == 0 ? "Reference / position only"
+        : $"Reported tilt offset ({value.Offset.X:F1}; {value.Offset.Y:F1})";
 
     private void Render()
     {

@@ -16,7 +16,7 @@ Milestone 2 uses **NetTopologySuite 2.6.0**, pinned in the core project and all 
 
 See the pinned [builder source](https://github.com/NetTopologySuite/NetTopologySuite/blob/v2.6.0/src/NetTopologySuite/Triangulate/DelaunayTriangulationBuilder.cs), [predicate source](https://github.com/NetTopologySuite/NetTopologySuite/blob/v2.6.0/src/NetTopologySuite/Triangulate/QuadEdge/TrianglePredicate.cs), and [license](https://github.com/NetTopologySuite/NetTopologySuite/blob/v2.6.0/License.md). Triangle.NET was considered but not selected because its maintainer documents [unresolved licensing](https://github.com/wo80/Triangle.NET#license).
 
-Single-sample nodes bypass triangulation and return their one measured error for any usable tilt; spatial blending remains unchanged. Prepared nodes retain only private value arrays and indices. Evaluating four small meshes uses bounded linear triangle/edge scans and binary grid lookup, without per-report allocations, construction, I/O, or locks. Synthetic tests cover exact and near degeneracies and sample permutations; they do not prove arbitrary extreme floating-point geometry is usable. No physical tilt-axis convention is inferred: guidance accepts already verified screen tangents, while interpolation always uses unchanged measured raw tilt.
+Single-sample nodes bypass triangulation and return their one measured error for any usable tilt; spatial blending remains unchanged. Prepared nodes retain only private value arrays and indices. Evaluating four small meshes uses bounded linear triangle/edge scans and binary grid lookup, without per-report allocations, construction, I/O, or locks. Synthetic tests cover exact and near degeneracies and sample permutations; they do not prove arbitrary extreme floating-point geometry is usable. No physical tilt-axis convention is inferred: guidance plots reported coordinates around each measured reference, while interpolation always uses unchanged measured raw tilt.
 
 ## Display coordinates
 
@@ -34,19 +34,20 @@ Versions and content hashes, including transitive dependencies, are captured in 
 | NetTopologySuite | 2.6.0 | BSD-3-Clause; core triangulation and robust predicates |
 | Newtonsoft.Json | 13.0.4 | MIT; OTD serialization and debug DTOs |
 | StreamJsonRpc | 2.22.23 | MIT; OTD named-pipe RPC |
+| MessagePack / Annotations | 2.5.301 | MIT; patched transitive RPC dependency, pinned in our build overlay |
 | JetBrains.Annotations | 2025.2.4 | MIT; OTD attributes |
 | Microsoft.Extensions.DependencyInjection | 10.0.1 | MIT; OTD service manager |
 | Octokit | 14.0.0 | MIT; OTD Desktop dependency |
 | SharpZipLib | 1.4.2 | MIT; OTD Desktop dependency |
 | System.CommandLine | 2.0.1 | MIT; OTD Desktop dependency |
 | WaylandNET | 0.2.0 | ISC; upstream cross-platform dependency, unused by Windows preview |
-| HidSharpCore | 1.3.0 | NuGet metadata omits a license; retain upstream attribution and resolve exact package notices before redistribution |
+| HidSharpCore | 1.3.0 | Apache-2.0, verified at the package-recorded source commit; license and NOTICE retained |
 | xunit / VS runner | 2.9.3 / 3.1.5 | Apache-2.0; tests only |
 | Microsoft.NET.Test.Sdk | 18.0.1 | MIT; tests only |
 
-Other restored Microsoft, MessagePack, and Nerdbank runtime packages declare MIT. `xunit.abstractions` 2.0.3 uses a legacy upstream license URL in its metadata. HidSharpCore source files carry an [Apache-2.0 header](https://github.com/OpenTabletDriver/HIDSharpCore/blob/master/HidSharp/ImplementationDetail.cs), but the 1.3.0 package lacks license metadata and the exact recorded commit's license text was not retrieved. Treat package notice verification as an outstanding distribution check, not as permission inferred from a current source file.
+Other restored Microsoft, MessagePack, and Nerdbank runtime packages declare MIT. The release script generates notices from the exact restored package metadata and retains bundled NOTICE/LICENSE files. HidSharpCore 1.3.0 records source commit bca4aee1c349985b0119eed24aba83e2dd63492d; its complete Apache-2.0 LICENSE and NOTICE were retrieved from that commit and are retained in packaging/licenses. WaylandNET declares ISC; its upstream copyright/license is retained. GPL-3.0 is included because LGPL-3.0 incorporates it.
 
-Development deployment requires the complete Calibrator build output and the .NET 8 Windows Desktop runtime. The correction filter uses the host's OTD Plugin assembly at runtime. Milestone 3 packages only CalibrationSuite.Filter, CalibrationSuite.Core, and NetTopologySuite 2.6.0, with metadata and the complete pinned upstream NetTopologySuite license notice. No OTD, RPC, WPF, or HidSharpCore binaries are included in the filter ZIP. The package script uses an explicit file list and fixed ZIP timestamps. The build-workflow revision adds the official Plugin package; existing transitive dependency versions remain pinned. No release artifact has been published. Calibrator distribution/license checks and live install/update/removal verification remain delivery work.
+The separate Calibrator archive requires the .NET 8 Windows Desktop runtime and includes complete dependency notices. The filter uses the host OTD Plugin assembly and ships only its own assemblies plus NTS, metadata, and MIT/NTS notices. Package-Release.ps1 also ships the actual source/build inputs and pinned OTD archive for the LGPL components, and generates checksums/registry metadata. These are local release candidates; no binary release has been published. See docs/RELEASE.md for verification and the remaining user workflow check.
 
 ## Visual guidance
 
@@ -70,3 +71,9 @@ Run Debug and Release builds, both test configurations, package loading, and liv
 Git preserves the upstream project-definition bytes for checksum comparison. The verified source archive is cached, extraction is serialized across parallel build processes, and a completion marker is written only after project definitions match. No source download runs during editor design-time evaluation. Build once to populate source navigation.
 
 The standard Windows OTD release contains single-file executables rather than standalone library DLLs; this is why Desktop remains source-built. Dependency preparation is build infrastructure, not an OTD requirement. The original neighboring checkout is no longer needed.
+
+## 2026-10-12 dependency audit
+
+The current NuGet vulnerability report identified MessagePack 2.5.192 in the Calibrator/OTD Desktop graph. Upstream's [June 2026 advisory](https://github.com/advisories/GHSA-hv8m-jj95-wg3x) and [recursive-skip advisory](https://github.com/advisories/GHSA-vh6j-jc39-fggf) identify 2.5.301 as a patched version on the same major branch. Pinned MessagePack 2.5.301 in dependencies/otd/Directory.Build.targets, preserving the exact upstream project files and source pin. Its matching annotations package resolves transitively. Locked restores, report reconstruction, named-pipe RPC, and packaging tests pass. NuGetAuditMode is explicitly all; no advisory suppression was added.
+
+The subsequent full-solution transitive vulnerability check reported no known vulnerable packages using the current NuGet.org advisory feed. This describes this repository's restored/distributed graph, not dependencies inside the user's separately installed OTD daemon.
