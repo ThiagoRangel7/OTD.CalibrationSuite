@@ -32,11 +32,33 @@ public class TabletSelectionTests
             AuxiliaryDeviceIdentifiers = [identifier],
             Specifications = new()
             {
-                Digitizer = new() { WidthAsDecimal = 123.456789m, HeightAsDecimal = 98.7654321m, MaxX = 20000, MaxY = 10000 },
-                Pen = new() { MaxPressure = 8192, ButtonCount = 2 },
-                AuxiliaryButtons = new() { ButtonCount = 8 },
-                MouseButtons = new() { ButtonCount = 3 },
-                Touch = new() { Width = 100, Height = 80, MaxX = 1000, MaxY = 800 },
+                Digitizer = new()
+                {
+                    WidthAsDecimal = 123.456789m,
+                    HeightAsDecimal = 98.7654321m,
+                    MaxX = 20000,
+                    MaxY = 10000
+                },
+                Pen = new()
+                {
+                    MaxPressure = 8192,
+                    ButtonCount = 2
+                },
+                AuxiliaryButtons = new()
+                {
+                    ButtonCount = 8
+                },
+                MouseButtons = new()
+                {
+                    ButtonCount = 3
+                },
+                Touch = new()
+                {
+                    Width = 100,
+                    Height = 80,
+                    MaxX = 1000,
+                    MaxY = 800
+                },
                 Wheels = [new() { RelativeWheelSteps = 24, ButtonCount = 1 },
                     new() { AbsoluteWheelMax = 360, AngleOfZeroReading = 45, ButtonCount = 2 }],
                 Strips = [new() { StepCount = 256, IsRelative = true }]
@@ -80,7 +102,11 @@ public class TabletSelectionTests
         var original = RichTablet();
         var incoming = Clone(original);
         var matches = TabletSelection.CreateMatcher(original);
-        incoming.Properties.Attributes = new() { ["second"] = "two", ["first"] = "one" };
+        incoming.Properties.Attributes = new()
+        {
+            ["second"] = "two",
+            ["first"] = "one"
+        };
         Assert.True(matches(incoming));
         incoming.Identifiers = incoming.Identifiers.Where(_ => true); // Non-list RPC consumers still compare by contents.
         Assert.True(matches(incoming));

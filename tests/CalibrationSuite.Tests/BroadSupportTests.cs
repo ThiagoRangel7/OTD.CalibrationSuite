@@ -12,8 +12,14 @@ public class BroadSupportTests
 {
     private static readonly CaptureSettings Settings = new()
     {
-        RowCount = 2, ColumnCount = 2, TiltDirections = 4, TiltLevels = 1,
-        CaptureWindowMs = 10, MinSamplesPerCapture = 2, ReportGapTimeoutMs = 40, CaptureTimeoutMs = 100
+        RowCount = 2,
+        ColumnCount = 2,
+        TiltDirections = 4,
+        TiltLevels = 1,
+        CaptureWindowMs = 10,
+        MinSamplesPerCapture = 2,
+        ReportGapTimeoutMs = 40,
+        CaptureTimeoutMs = 100
     };
     private static ReportReading Reading(double time, Point2 position, Point2? tilt) =>
         new((long)Math.Round(time * Stopwatch.Frequency / 1000), new((float)position.X, (float)position.Y),
@@ -27,8 +33,10 @@ public class BroadSupportTests
         var tablet = IntegrationTests.Tablet();
         tablet.Properties.Name = "Any display tablet";
         var geometry = CaptureDevice.Geometry(tablet);
-        var workspace = new CalibrationWorkspace(); workspace.Begin(Settings, geometry);
-        var draft = workspace.Session!; var capture = new CaptureController(draft);
+        var workspace = new CalibrationWorkspace();
+        workspace.Begin(Settings, geometry);
+        var draft = workspace.Session!;
+        var capture = new CaptureController(draft);
         Point2 reference = new(120, -75), error = new(2, -3);
         capture.Read(Reading(0, draft.CurrentTarget, reportsTilt ? reference : null));
         Assert.Equal(reportsTilt ? 20 : 4, draft.Total);
@@ -37,18 +45,24 @@ public class BroadSupportTests
         {
             var position = draft.CurrentTarget + error;
             Point2? tilt = reportsTilt ? draft.RequestedTilt ?? reference : null;
-            capture.Start(time); capture.Read(Reading(time, position, tilt)); capture.Read(Reading(time + 10, position, tilt));
+            capture.Start(time);
+            capture.Read(Reading(time, position, tilt));
+            capture.Read(Reading(time + 10, position, tilt));
             time += 20;
         }
-        workspace.Finish(); workspace.Accept();
+        workspace.Finish();
+        workspace.Accept();
         string json = workspace.CopyPayload();
         var prepared = PreparedCalibration.Load(json, geometry, out var diagnostic);
-        Assert.Null(diagnostic); Assert.Equal(reportsTilt, prepared.RequiresTilt);
-        var filter = new CalibrationFilter { Tablet = tablet, CalibrationJson = json }; filter.Initialize();
+        Assert.Null(diagnostic);
+        Assert.Equal(reportsTilt, prepared.RequiresTilt);
+        var filter = new CalibrationFilter { Tablet = tablet, CalibrationJson = json };
+        filter.Initialize();
         IDeviceReport report = reportsTilt
             ? new TiltTabletReport { Raw = [1], Position = new(10000, 5000), Tilt = new(125, -70), Pressure = 321, PenButtons = [true] }
             : new TabletReport { Raw = [1], Position = new(10000, 5000), Pressure = 321, PenButtons = [true] };
-        IDeviceReport? emitted = null; filter.Emit += r => emitted = r;
+        IDeviceReport? emitted = null;
+        filter.Emit += r => emitted = r;
         filter.Consume(report);
         Assert.Same(report, emitted);
         Assert.Equal(new Vector2(9998, 5003), ((IAbsolutePositionReport)report).Position);
@@ -82,7 +96,8 @@ public class BroadSupportTests
     public void MissingTiltAfterCapabilityDetectionNeverDowngradesOrReusesTilt()
     {
         var geometry = CaptureDevice.Geometry(IntegrationTests.Tablet());
-        var draft = new CaptureDraft(Settings, geometry); var capture = new CaptureController(draft);
+        var draft = new CaptureDraft(Settings, geometry);
+        var capture = new CaptureController(draft);
         capture.Start(0);
         capture.Read(Reading(0, draft.CurrentTarget, new(5, -10)));
         capture.Read(Reading(10, draft.CurrentTarget, new(5, -10)));
@@ -92,7 +107,8 @@ public class BroadSupportTests
         capture.Read(Reading(20, draft.CurrentTarget, draft.RequestedTilt));
         capture.Read(Reading(25, draft.CurrentTarget, null));
         capture.Read(Reading(30, draft.CurrentTarget, draft.RequestedTilt));
-        Assert.True(draft.UsesTilt); Assert.Equal(1, draft.CapturedCount);
+        Assert.True(draft.UsesTilt);
+        Assert.Equal(1, draft.CapturedCount);
         Assert.Equal(CaptureBurstStatus.Retry, capture.Snapshot(30).BurstStatus);
     }
 
@@ -102,15 +118,20 @@ public class BroadSupportTests
         var data = CoreFixtures.Data();
         foreach (var row in data.Nodes!)
             foreach (var node in row)
-                node.Samples[0] = node.Samples[0] with { RequestedPose = new(90) };
-        var tiltFilter = new CalibrationFilter { Tablet = Tablet(), CalibrationJson = data.ToJson() }; tiltFilter.Initialize();
+                node.Samples[0] = node.Samples[0] with
+                {
+                    RequestedPose = new(90)
+                };
+        var tiltFilter = new CalibrationFilter { Tablet = Tablet(), CalibrationJson = data.ToJson() };
+        tiltFilter.Initialize();
         IDeviceReport missing = new TabletReport { Position = new(500, 500) };
         tiltFilter.Consume(missing);
         Assert.Equal(new Vector2(500, 500), ((IAbsolutePositionReport)missing).Position);
         for (int r = 0; r < 2; r++)
             for (int c = 0; c < 2; c++)
                 data.Nodes[r][c] = new([data.Nodes[r][c].Samples[0]]);
-        var positionFilter = new CalibrationFilter { Tablet = Tablet(), CalibrationJson = data.ToJson() }; positionFilter.Initialize();
+        var positionFilter = new CalibrationFilter { Tablet = Tablet(), CalibrationJson = data.ToJson() };
+        positionFilter.Initialize();
         IDeviceReport invalidTilt = new TiltTabletReport { Position = new(500, 500), Tilt = new(float.NaN, 0) };
         positionFilter.Consume(invalidTilt);
         Assert.Equal(new Vector2(498, 497), ((IAbsolutePositionReport)invalidTilt).Position);
@@ -120,14 +141,16 @@ public class BroadSupportTests
     {
         var tablet = IntegrationTests.Tablet();
         var digitizer = tablet.Properties.Specifications.Digitizer;
-        digitizer.MaxX = digitizer.MaxY = 1000; digitizer.Width = digitizer.Height = 100;
+        digitizer.MaxX = digitizer.MaxY = 1000;
+        digitizer.Width = digitizer.Height = 100;
         return tablet;
     }
 
     [Fact]
     public void BuiltInHuionXpPenAndPositionOnlyReportsUseTheSameContracts()
     {
-        byte[] bytes = new byte[12]; bytes[1] = 0x80;
+        byte[] bytes = new byte[12];
+        bytes[1] = 0x80;
         IDeviceReport[] reports = [
             new OpenTabletDriver.Configurations.Parsers.Huion.GianoReportParser().Parse(bytes),
             new OpenTabletDriver.Configurations.Parsers.XP_Pen.XP_PenPressureOffsetTiltTabletReport(bytes),
@@ -136,8 +159,10 @@ public class BroadSupportTests
         var tablet = Tablet();
         var data = CoreFixtures.Data();
         for (int r = 0; r < 2; r++)
-            for (int c = 0; c < 2; c++) data.Nodes![r][c] = new([data.Nodes[r][c].Samples[0]]);
-        var filter = new CalibrationFilter { Tablet = tablet, CalibrationJson = data.ToJson() }; filter.Initialize();
+            for (int c = 0; c < 2; c++)
+                data.Nodes![r][c] = new([data.Nodes[r][c].Samples[0]]);
+        var filter = new CalibrationFilter { Tablet = tablet, CalibrationJson = data.ToJson() };
+        filter.Initialize();
         foreach (var report in reports)
         {
             ((IAbsolutePositionReport)report).Position = new(500, 500);

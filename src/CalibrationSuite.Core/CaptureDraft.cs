@@ -51,8 +51,13 @@ public sealed class CaptureDraft
     // Resolve report capability before the first measurement; retain all other settings.
     public void UsePositionOnly()
     {
-        if (!UsesTilt || CapturedCount != 0) return;
-        Settings = Settings with { TiltDirections = 0, TiltLevels = 0 };
+        if (!UsesTilt || CapturedCount != 0)
+            return;
+        Settings = Settings with
+        {
+            TiltDirections = 0,
+            TiltLevels = 0
+        };
         Poses = Array.AsReadOnly(Settings.CreatePoses());
         samples = new CalibrationSample?[Settings.TotalCaptures];
         endIndex = samples.Length;
@@ -60,15 +65,18 @@ public sealed class CaptureDraft
 
     public CaptureDraft Recapture(int index, bool wholeNode)
     {
-        if (!Complete) throw new CalibrationException("Complete this capture before targeted recapture; use Previous while capturing.");
-        if ((uint)index >= samples.Length) throw new ArgumentOutOfRangeException(nameof(index));
+        if (!Complete)
+            throw new CalibrationException("Complete this capture before targeted recapture; use Previous while capturing.");
+        if ((uint)index >= samples.Length)
+            throw new ArgumentOutOfRangeException(nameof(index));
         int start = wholeNode ? index / Poses.Count * Poses.Count : index;
         return new(this, start, wholeNode ? Poses.Count : 1);
     }
 
     public void Previous()
     {
-        if (cursor > firstIndex) cursor--;
+        if (cursor > firstIndex)
+            cursor--;
     }
 
     public void Restart()
@@ -76,7 +84,8 @@ public sealed class CaptureDraft
         // Full capture and pose/node recapture each cover one contiguous range.
         for (int i = firstIndex; i < endIndex; i++)
         {
-            if (samples[i] == null) continue;
+            if (samples[i] == null)
+                continue;
             samples[i] = null;
             CapturedCount--;
         }
@@ -85,20 +94,25 @@ public sealed class CaptureDraft
 
     public void Store(CalibrationSample sample)
     {
-        if (Complete) throw new InvalidOperationException("Capture is already complete.");
+        if (Complete)
+            throw new InvalidOperationException("Capture is already complete.");
 
         int index = CurrentIndex;
         int nodeStart = index / Poses.Count * Poses.Count;
         int capturedInNode = 1;
         for (int i = nodeStart; i < nodeStart + Poses.Count; i++)
         {
-            if (i == index || samples[i] is not { } existing) continue;
+            if (i == index || samples[i] is not { } existing)
+                continue;
             if (existing.Tilt == sample.Tilt)
                 throw new CalibrationException("Duplicate measured tilt. Recapture with distinct reported values.");
             capturedInNode++;
         }
 
-        sample = sample with { RequestedPose = CurrentPose };
+        sample = sample with
+        {
+            RequestedPose = CurrentPose
+        };
         if (capturedInNode == Poses.Count)
         {
             var node = new CalibrationSample[Poses.Count];
@@ -108,14 +122,16 @@ public sealed class CaptureDraft
         }
 
         // Commit only after every validation succeeds; failed replacements preserve the old sample.
-        if (samples[index] == null) CapturedCount++;
+        if (samples[index] == null)
+            CapturedCount++;
         samples[index] = sample;
         cursor++;
     }
 
     public CalibrationData ToData()
     {
-        if (!Complete) throw new CalibrationException("Capture every requested pose before accepting.");
+        if (!Complete)
+            throw new CalibrationException("Capture every requested pose before accepting.");
         return new CalibrationData
         {
             Mode = "measured",

@@ -18,7 +18,8 @@ public sealed class FakeDaemon : IAcquisitionDaemon
     public Task SetDebug(bool enabled)
     {
         DebugCalls.Add(enabled);
-        if (enabled) Enabled.TrySetResult();
+        if (enabled)
+            Enabled.TrySetResult();
         return DebugAction?.Invoke(enabled) ?? Task.CompletedTask;
     }
     public Task<TabletReference[]> GetTablets() => Task.FromResult(ConnectedTablets ?? [Tablet]);
@@ -33,13 +34,18 @@ public class AcquisitionTests
     {
         private readonly ConcurrentQueue<(SendOrPostCallback Callback, object? State)> pending = new();
         public override void Post(SendOrPostCallback callback, object? state) => pending.Enqueue((callback, state));
-        public void Drain() { while (pending.TryDequeue(out var item)) item.Callback(item.State); }
+        public void Drain()
+        {
+            while (pending.TryDequeue(out var item))
+                item.Callback(item.State);
+        }
     }
 
     [Fact]
     public async Task DisconnectCleansUpWithoutPumpingTheCallingContext()
     {
-        var daemon = new FakeDaemon(); var session = Session(daemon);
+        var daemon = new FakeDaemon();
+        var session = Session(daemon);
         var context = new PausedContext();
         var previous = SynchronizationContext.Current;
         Task<string> run;
@@ -66,8 +72,10 @@ public class AcquisitionTests
     [Fact]
     public async Task CancelDisablesAndUnsubscribes()
     {
-        var daemon = new FakeDaemon(); var session = Session(daemon);
-        var run = Task.Run(session.RunAsync); await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        var daemon = new FakeDaemon();
+        var session = Session(daemon);
+        var run = Task.Run(session.RunAsync);
+        await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3));
         session.Cancel("User cancelled");
         Assert.Contains("User cancelled", await run.WaitAsync(TimeSpan.FromSeconds(3)));
         Assert.Equal(new[] { true, false }, daemon.DebugCalls);
@@ -77,8 +85,12 @@ public class AcquisitionTests
     [Fact]
     public async Task CancelBeforeStartNeverEnablesDebug()
     {
-        var daemon = new FakeDaemon(); var session = Session(daemon); session.Cancel();
-        await session.RunAsync(); Assert.Empty(daemon.DebugCalls); Assert.False(daemon.HasSubscribers);
+        var daemon = new FakeDaemon();
+        var session = Session(daemon);
+        session.Cancel();
+        await session.RunAsync();
+        Assert.Empty(daemon.DebugCalls);
+        Assert.False(daemon.HasSubscribers);
     }
 
     [Fact]
@@ -87,25 +99,30 @@ public class AcquisitionTests
         var daemon = new FakeDaemon();
         daemon.DebugAction = enabled => { if (enabled) { daemon.Send(); daemon.Send(); } return Task.CompletedTask; };
         var result = await Session(daemon, new(Capacity: 1)).RunAsync();
-        Assert.Contains("overflow", result); Assert.Equal(new[] { true, false }, daemon.DebugCalls);
+        Assert.Contains("overflow", result);
+        Assert.Equal(new[] { true, false }, daemon.DebugCalls);
     }
 
     [Fact]
     public async Task PenAbsenceWaitsAndReportsResumeWithoutRestart()
     {
-        var daemon = new FakeDaemon(); var session = Session(daemon, new(StallMilliseconds: 80, RpcTimeoutMilliseconds: 80));
+        var daemon = new FakeDaemon();
+        var session = Session(daemon, new(StallMilliseconds: 80, RpcTimeoutMilliseconds: 80));
         var run = Task.Run(session.RunAsync);
         await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3));
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
         daemon.Send();
-        while (session.Latest == null) await Task.Delay(10, deadline.Token);
+        while (session.Latest == null)
+            await Task.Delay(10, deadline.Token);
         await Task.Delay(650);
         Assert.Null(session.Latest);
         Assert.False(run.IsCompleted);
         daemon.Send();
-        while (session.Latest == null) await Task.Delay(10, deadline.Token);
+        while (session.Latest == null)
+            await Task.Delay(10, deadline.Token);
         Assert.Equal(321u, session.Latest.Pressure);
-        session.Cancel(); await run;
+        session.Cancel();
+        await run;
         Assert.Equal(new[] { true, false }, daemon.DebugCalls);
     }
 
@@ -126,39 +143,52 @@ public class AcquisitionTests
     [Fact]
     public async Task InvalidationCancelsAndUnsubscribes()
     {
-        var daemon = new FakeDaemon(); var session = Session(daemon);
-        var run = Task.Run(session.RunAsync); await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        var daemon = new FakeDaemon();
+        var session = Session(daemon);
+        var run = Task.Run(session.RunAsync);
+        await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3));
         daemon.Invalidate();
         Assert.Contains("disconnected", await run.WaitAsync(TimeSpan.FromSeconds(3)));
-        Assert.False(daemon.HasSubscribers); Assert.Equal(new[] { true, false }, daemon.DebugCalls);
+        Assert.False(daemon.HasSubscribers);
+        Assert.Equal(new[] { true, false }, daemon.DebugCalls);
     }
 
     [Fact]
     public async Task CancellationDuringEnableWaitsThenDisables()
     {
-        var daemon = new FakeDaemon(); var enable = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var daemon = new FakeDaemon();
+        var enable = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         daemon.DebugAction = on => on ? enable.Task : Task.CompletedTask;
-        var session = Session(daemon); var run = Task.Run(session.RunAsync);
-        await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3)); session.Cancel();
+        var session = Session(daemon);
+        var run = Task.Run(session.RunAsync);
+        await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        session.Cancel();
         Assert.Equal(new[] { true }, daemon.DebugCalls);
-        enable.SetResult(); await run.WaitAsync(TimeSpan.FromSeconds(3));
+        enable.SetResult();
+        await run.WaitAsync(TimeSpan.FromSeconds(3));
         Assert.Equal(new[] { true, false }, daemon.DebugCalls);
     }
 
     [Fact]
     public async Task ReconstructionFailureCancelsAndCleansUp()
     {
-        var daemon = new FakeDaemon(); var session = Session(daemon);
-        var run = Task.Run(session.RunAsync); await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3));
-        var report = IntegrationTests.Report(daemon.Tablet); report.Path = "Unknown.Report"; daemon.Send(report);
+        var daemon = new FakeDaemon();
+        var session = Session(daemon);
+        var run = Task.Run(session.RunAsync);
+        await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        var report = IntegrationTests.Report(daemon.Tablet);
+        report.Path = "Unknown.Report";
+        daemon.Send(report);
         Assert.Contains("Cannot reconstruct", await run.WaitAsync(TimeSpan.FromSeconds(3)));
-        Assert.False(daemon.HasSubscribers); Assert.Equal(new[] { true, false }, daemon.DebugCalls);
+        Assert.False(daemon.HasSubscribers);
+        Assert.Equal(new[] { true, false }, daemon.DebugCalls);
     }
 
     [Fact]
     public async Task CleanupFailureIsVisible()
     {
-        var daemon = new FakeDaemon(); daemon.DebugAction = on => on ? Task.CompletedTask : Task.FromException(new IOException("Disconnected"));
+        var daemon = new FakeDaemon();
+        daemon.DebugAction = on => on ? Task.CompletedTask : Task.FromException(new IOException("Disconnected"));
         var session = Session(daemon, new(StallMilliseconds: 50));
         var run = Task.Run(session.RunAsync);
         await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3));
@@ -179,7 +209,8 @@ public class AcquisitionTests
         var disabled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         daemon.DebugAction = on =>
         {
-            if (on) return enable.Task;
+            if (on)
+                return enable.Task;
             disabled.SetResult();
             return Task.CompletedTask;
         };
@@ -209,14 +240,21 @@ public class AcquisitionTests
     [Fact]
     public async Task EachIdenticalEventIsConsumedOnceWithMonotonicIngressTime()
     {
-        var daemon = new FakeDaemon(); var times = new List<long>();
+        var daemon = new FakeDaemon();
+        var times = new List<long>();
         var consumed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var session = new AcquisitionSession(daemon, daemon.Tablet,
             reconstruct: (report, time) => { times.Add(time); if (times.Count == 2) consumed.SetResult(); return ReportReadingFactory.Read(report, time); });
-        var run = Task.Run(session.RunAsync); await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3));
-        var report = IntegrationTests.Report(daemon.Tablet); daemon.Send(report); daemon.Send(report);
-        await consumed.Task.WaitAsync(TimeSpan.FromSeconds(3)); session.Cancel(); await run;
-        Assert.Equal(2, times.Count); Assert.True(times[1] >= times[0]);
+        var run = Task.Run(session.RunAsync);
+        await daemon.Enabled.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        var report = IntegrationTests.Report(daemon.Tablet);
+        daemon.Send(report);
+        daemon.Send(report);
+        await consumed.Task.WaitAsync(TimeSpan.FromSeconds(3));
+        session.Cancel();
+        await run;
+        Assert.Equal(2, times.Count);
+        Assert.True(times[1] >= times[0]);
     }
 
     [Fact]

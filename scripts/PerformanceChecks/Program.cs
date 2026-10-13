@@ -50,20 +50,23 @@ CalibrationSample? sample = null;
 Measure("Capture burst (64 reports)", 1000, () =>
 {
     burst.Start(null, 0);
-    for (int i = 0; i < 64; i++) sample = burst.Add(i, new(10000 + i % 3, 5000 + i % 2), default);
+    for (int i = 0; i < 64; i++)
+        sample = burst.Add(i, new(10000 + i % 3, 5000 + i % 2), default);
 });
 if (sample == null) throw new InvalidOperationException("Synthetic burst was not accepted.");
 
 static void Measure(string name, int repetitions, Action action)
 {
-    for (int i = 0; i < 1000; i++) action();
+    for (int i = 0; i < 1000; i++)
+        action();
     var times = new double[5];
     var allocations = new long[5];
     for (int run = 0; run < times.Length; run++)
     {
         var watch = Stopwatch.StartNew();
         long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < repetitions; i++) action();
+        for (int i = 0; i < repetitions; i++)
+            action();
         allocations[run] = (GC.GetAllocatedBytesForCurrentThread() - before) / repetitions;
         times[run] = watch.Elapsed.TotalMicroseconds / repetitions;
     }

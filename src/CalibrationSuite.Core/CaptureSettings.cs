@@ -25,7 +25,8 @@ public sealed record CaptureSettings
     {
         static void Require(bool condition, string property, string message)
         {
-            if (!condition) throw new CalibrationException(message, property);
+            if (!condition)
+                throw new CalibrationException(message, property);
         }
 
         Require(RowCount >= 2, nameof(RowCount), "Use at least 2 rows.");
@@ -48,7 +49,8 @@ public sealed record CaptureSettings
         long poses = HasTiltPoses ? 1L + (long)TiltDirections * TiltLevels : 1;
         if (poses > MaximumCaptures / RowCount / ColumnCount)
             throw new CalibrationException($"Use at most {MaximumCaptures:N0} captures per session.");
-        if (geometry == null) return;
+        if (geometry == null)
+            return;
         geometry.Validate();
         if (GridInsetMm >= Math.Min(geometry.WidthMm, geometry.HeightMm) / 2)
             throw new CalibrationException("Grid inset must be less than half each digitizer dimension.", nameof(GridInsetMm));
@@ -73,7 +75,8 @@ public sealed record CaptureSettings
     {
         var poses = new RequestedPose[PoseCount];
         poses[0] = new(0);
-        if (!HasTiltPoses) return poses;
+        if (!HasTiltPoses)
+            return poses;
         int index = 1;
         for (int azimuth = 0; azimuth < TiltDirections; azimuth++)
             for (int level = 1; level <= TiltLevels; level++)

@@ -49,7 +49,8 @@ public class CaptureLayoutTests
             defaults with { MinSamplesPerCapture = 0 }, defaults with { ReportGapTimeoutMs = 0 },
             defaults with { PositionStabilityMm = 0 }, defaults with { TiltStability = double.PositiveInfinity }
         ];
-        foreach (var settings in invalid) Assert.Throws<CalibrationException>(() => settings.CreateGrid(Geometry));
+        foreach (var settings in invalid)
+            Assert.Throws<CalibrationException>(() => settings.CreateGrid(Geometry));
         Assert.Throws<CalibrationException>(() => defaults.CreateGrid(Geometry with { MaxX = 0 }));
     }
 
@@ -76,6 +77,7 @@ public class CaptureLayoutTests
     public void TiltTargetsCoverReportedCoordinateDirections(double direction, double x, double y)
     {
         var offset = new RequestedPose(40, direction).Offset;
-        Assert.Equal(x, offset.X, 8); Assert.Equal(y, offset.Y, 8);
+        Assert.Equal(x, offset.X, 8);
+        Assert.Equal(y, offset.Y, 8);
     }
 }

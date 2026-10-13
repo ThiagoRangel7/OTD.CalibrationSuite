@@ -33,13 +33,15 @@ public sealed class DaemonConnection : IAcquisitionDaemon
 
     public Task Connect()
     {
-        if (connecting?.IsFaulted == true) connecting = null;
+        if (connecting?.IsFaulted == true)
+            connecting = null;
         return connecting ??= Initialize();
     }
 
     private async Task Initialize()
     {
-        if (!client.IsConnected) await client.Connect().ConfigureAwait(false);
+        if (!client.IsConnected)
+            await client.Connect().ConfigureAwait(false);
         AppInfo.Current = await client.Instance.GetApplicationInfo().ConfigureAwait(false);
         AppInfo.PluginManager = new DesktopPluginManager();
         AppInfo.PluginManager.Load();

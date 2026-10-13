@@ -71,16 +71,23 @@ public class OrientationVisualTests
     {
         var capture = new CaptureController(new(Settings, Geometry));
         capture.Start(0);
-        capture.Read(Reading(-1)); Assert.Equal(0, capture.Snapshot(0).BurstProgress);
-        capture.Read(Reading(20)); Assert.Equal(0, capture.Snapshot(20).BurstProgress);
-        capture.Read(Reading(25)); Assert.Equal(0.5, capture.Snapshot(25).BurstProgress, 6);
-        capture.Read(Reading(25)); Assert.Equal(0.5, capture.Snapshot(25).BurstProgress, 6);
-        capture.Read(Reading(25)); Assert.Equal(0.5, capture.Snapshot(25).BurstProgress, 6);
+        capture.Read(Reading(-1));
+        Assert.Equal(0, capture.Snapshot(0).BurstProgress);
+        capture.Read(Reading(20));
+        Assert.Equal(0, capture.Snapshot(20).BurstProgress);
+        capture.Read(Reading(25));
+        Assert.Equal(0.5, capture.Snapshot(25).BurstProgress, 6);
+        capture.Read(Reading(25));
+        Assert.Equal(0.5, capture.Snapshot(25).BurstProgress, 6);
+        capture.Read(Reading(25));
+        Assert.Equal(0.5, capture.Snapshot(25).BurstProgress, 6);
         capture.Read(Reading(30));
         var accepted = capture.Snapshot(30);
-        Assert.Equal(1, accepted.BurstProgress); Assert.Equal(10, accepted.BurstDurationMs, 6);
+        Assert.Equal(1, accepted.BurstProgress);
+        Assert.Equal(10, accepted.BurstDurationMs, 6);
         Assert.Equal(CaptureBurstStatus.Accepted, accepted.BurstStatus);
-        Assert.Equal(0, accepted.AcceptedIndex); Assert.Equal(1, accepted.Index);
+        Assert.Equal(0, accepted.AcceptedIndex);
+        Assert.Equal(1, accepted.Index);
         Assert.Equal(CaptureCue.Accepted, CaptureFeedback.Resolve(accepted, Reading(0), 3, 30).Cue);
         Assert.Equal(CaptureCue.Ready, CaptureFeedback.Resolve(accepted, Reading(0), 3, 880).Cue);
         Assert.Equal(CaptureCue.Waiting, CaptureFeedback.Resolve(accepted, null, 3, 880).Cue);
@@ -89,38 +96,69 @@ public class OrientationVisualTests
     [Fact]
     public void NavigationAndRestartRemoveAcceptedCuesAndRetriesCannotAppearAccepted()
     {
-        var capture = new CaptureController(new(Settings with { MinSamplesPerCapture = 2 }, Geometry));
-        capture.Start(0); capture.Read(Reading(0)); capture.Read(Reading(10));
-        capture.Previous(); Assert.Null(capture.Snapshot(11).AcceptedAtMs);
+        var capture = new CaptureController(new(Settings with
+        {
+            MinSamplesPerCapture = 2
+        }, Geometry));
+        capture.Start(0);
+        capture.Read(Reading(0));
+        capture.Read(Reading(10));
+        capture.Previous();
+        Assert.Null(capture.Snapshot(11).AcceptedAtMs);
         Assert.Equal(CaptureCue.Ready, CaptureFeedback.Resolve(capture.Snapshot(11), Reading(0), 3, 11).Cue);
-        capture.Start(11); Assert.Equal(CaptureCue.Capturing, CaptureFeedback.Resolve(capture.Snapshot(11), Reading(0), 3, 11).Cue);
+        capture.Start(11);
+        Assert.Equal(CaptureCue.Capturing, CaptureFeedback.Resolve(capture.Snapshot(11), Reading(0), 3, 11).Cue);
         var retry = capture.Snapshot(52);
-        Assert.Equal(CaptureBurstStatus.Retry, retry.BurstStatus); Assert.Equal(0, retry.BurstProgress);
+        Assert.Equal(CaptureBurstStatus.Retry, retry.BurstStatus);
+        Assert.Equal(0, retry.BurstProgress);
         Assert.Equal(CaptureCue.Retry, CaptureFeedback.Resolve(retry, Reading(0), 3, 52).Cue);
         Assert.Equal(1, retry.Captured); // Retry preserves the prior measurement.
-        capture.Restart(); var reset = capture.Snapshot(53);
-        Assert.Equal(0, reset.Captured); Assert.Null(reset.AcceptedAtMs); Assert.Equal(CaptureBurstStatus.Idle, reset.BurstStatus);
+        capture.Restart();
+        var reset = capture.Snapshot(53);
+        Assert.Equal(0, reset.Captured);
+        Assert.Null(reset.AcceptedAtMs);
+        Assert.Equal(CaptureBurstStatus.Idle, reset.BurstStatus);
     }
 
     [Fact]
     public void ReadinessUsesTheReportedCoordinateCircleAndNeedsAFreshPenReading()
     {
-        var state = new CaptureProgress(1, 1, 20, default, new(40, 0), false, 0, false, "")
-        { UsesTilt = true, ReferenceTilt = new(100, 200), RequestedTilt = new(140, 200) };
-        Assert.Equal(CaptureCue.Ready, CaptureFeedback.Resolve(state, Reading(0) with { Tilt = new(143, 204) }, 5, 0).Cue);
-        Assert.Equal(CaptureCue.Adjusting, CaptureFeedback.Resolve(state, Reading(0) with { Tilt = new(144, 204) }, 5, 0).Cue);
+        var state = new CaptureProgress(1, 1, 20, default, new(40, 0), 0, false, "")
+        {
+            UsesTilt = true,
+            ReferenceTilt = new(100, 200),
+            RequestedTilt = new(140, 200)
+        };
+        Assert.Equal(CaptureCue.Ready, CaptureFeedback.Resolve(state, Reading(0) with
+        {
+            Tilt = new(143, 204)
+        }, 5, 0).Cue);
+        Assert.Equal(CaptureCue.Adjusting, CaptureFeedback.Resolve(state, Reading(0) with
+        {
+            Tilt = new(144, 204)
+        }, 5, 0).Cue);
         Assert.Equal(CaptureCue.Waiting, CaptureFeedback.Resolve(state, null, 5, 0).Cue);
     }
 
     [Fact]
     public void ReplacingAnExistingMeasurementStillProducesANewAcceptedCue()
     {
-        var draft = new CaptureDraft(Settings with { MinSamplesPerCapture = 2 }, Geometry);
+        var draft = new CaptureDraft(Settings with
+        {
+            MinSamplesPerCapture = 2
+        }, Geometry);
         var capture = new CaptureController(draft);
-        capture.Start(0); capture.Read(Reading(0)); capture.Read(Reading(10)); capture.Previous();
-        capture.Start(12); capture.Read(Reading(12)); capture.Read(Reading(22));
+        capture.Start(0);
+        capture.Read(Reading(0));
+        capture.Read(Reading(10));
+        capture.Previous();
+        capture.Start(12);
+        capture.Read(Reading(12));
+        capture.Read(Reading(22));
         var snapshot = capture.Snapshot(22);
-        Assert.Equal(1, snapshot.Captured); Assert.Equal(0, snapshot.AcceptedIndex); Assert.Equal(22, snapshot.AcceptedAtMs!.Value, 6);
+        Assert.Equal(1, snapshot.Captured);
+        Assert.Equal(0, snapshot.AcceptedIndex);
+        Assert.Equal(22, snapshot.AcceptedAtMs!.Value, 6);
         Assert.Equal(CaptureCue.Accepted, CaptureFeedback.Resolve(snapshot, Reading(0), 3, 22).Cue);
     }
 
@@ -136,12 +174,16 @@ public class OrientationVisualTests
     [Fact]
     public void FailedMeshStorageKeepsARecoveryHintAndNeverAppearsAccepted()
     {
-        var state = new CaptureProgress(4, 4, 20, default, new(50, 270), false, 0, false,
+        var state = new CaptureProgress(4, 4, 20, default, new(50, 270), 0, false,
             "Tilt mesh does not retain every distinct sample; recapture unusable or collinear coverage.")
-        { BurstStatus = CaptureBurstStatus.Retry, AcceptedAtMs = 999 };
+        {
+            BurstStatus = CaptureBurstStatus.Retry,
+            AcceptedAtMs = 999
+        };
         var feedback = CaptureFeedback.Resolve(state, Reading(0), 3, 1000);
         Assert.Equal(CaptureCue.Retry, feedback.Cue);
-        Assert.Contains("coverage", feedback.Hint); Assert.Contains("revisit", feedback.Hint);
+        Assert.Contains("coverage", feedback.Hint);
+        Assert.Contains("revisit", feedback.Hint);
         Assert.Equal("Tilt mesh does not retain every distinct sample; recapture unusable or collinear coverage.", state.Message);
     }
 }

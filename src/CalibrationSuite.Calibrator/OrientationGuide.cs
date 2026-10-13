@@ -31,25 +31,34 @@ public sealed class OrientationGuide : FrameworkElement
     public bool OverlapsGuidance(Rect bounds)
     {
         bounds.Inflate(4, 4);
-        if (bounds.IntersectsWith(new Rect(Anchor.X - 28, Anchor.Y - 28, 56, 56))) return true;
+        if (bounds.IntersectsWith(new Rect(Anchor.X - 28, Anchor.Y - 28, 56, 56)))
+            return true;
         if (bounds.IntersectsWith(outline.Bounds))
         {
             var stroke = outlineStroke ??= outline.GetFlattenedPathGeometry(0.1, ToleranceType.Absolute).GetWidenedPathGeometry(TargetLine);
-            if (stroke.FillContainsWithDetail(new RectangleGeometry(bounds)) != IntersectionDetail.Empty) return true;
+            if (stroke.FillContainsWithDetail(new RectangleGeometry(bounds)) != IntersectionDetail.Empty)
+                return true;
         }
-        if (current is not { } live) return false;
+        if (current is not { } live)
+            return false;
         var tip = OrientationScene.ArrowTip(live, scale) * Radius + Anchor;
         var arrowBounds = new Rect(new Point(Anchor.X, Anchor.Y), new Point(tip.X, tip.Y));
         arrowBounds.Inflate(2, 2);
         return bounds.IntersectsWith(arrowBounds);
     }
 
-    public OrientationGuide() { IsHitTestVisible = false; ClipToBounds = true; }
+    public OrientationGuide()
+    {
+        IsHitTestVisible = false;
+        ClipToBounds = true;
+    }
 
     public void Place(Point2 anchor, double radius)
     {
-        if (anchor == Anchor && radius == Radius) return;
-        Anchor = anchor; Radius = radius;
+        if (anchor == Anchor && radius == Radius)
+            return;
+        Anchor = anchor;
+        Radius = radius;
         placement.Matrix = new(radius, 0, 0, radius, anchor.X, anchor.Y);
         outlineStroke = null;
         InvalidateVisual();
@@ -57,7 +66,8 @@ public sealed class OrientationGuide : FrameworkElement
 
     public void Update(Point2? next, Point2? live, double toleranceUnits, double tiltScale, CaptureCue nextCue, double burstProgress, bool retryReady = false)
     {
-        if (next == requested && live == current && toleranceUnits == tolerance && tiltScale == scale && nextCue == cue && burstProgress == progress && retryReady == readyToRetry) return;
+        if (next == requested && live == current && toleranceUnits == tolerance && tiltScale == scale && nextCue == cue && burstProgress == progress && retryReady == readyToRetry)
+            return;
         if (next != requested || toleranceUnits != tolerance || tiltScale != scale)
         {
             if (next is { } target)
@@ -65,10 +75,17 @@ public sealed class OrientationGuide : FrameworkElement
                 var point = OrientationScene.ArrowTip(target, tiltScale);
                 outline = new EllipseGeometry(new(point.X, point.Y), toleranceUnits / tiltScale, toleranceUnits / tiltScale) { Transform = placement };
             }
-            else outline = Geometry.Empty;
+            else
+                outline = Geometry.Empty;
             outlineStroke = null;
         }
-        requested = next; current = live; tolerance = toleranceUnits; scale = tiltScale; cue = nextCue; progress = burstProgress; readyToRetry = retryReady;
+        requested = next;
+        current = live;
+        tolerance = toleranceUnits;
+        scale = tiltScale;
+        cue = nextCue;
+        progress = burstProgress;
+        readyToRetry = retryReady;
         InvalidateVisual();
     }
 
@@ -115,15 +132,19 @@ public sealed class OrientationGuide : FrameworkElement
         }
         if (current is { } live)
         {
-            var tip = End(live); var direction = tip - center;
+            var tip = End(live);
+            var direction = tip - center;
             dc.DrawLine(LiveLine, center, tip);
             if (direction.Length >= 6)
             {
                 direction.Normalize();
-                var tail = tip - direction * 4; var side = new Vector(-direction.Y, direction.X) * 2;
-                dc.DrawLine(LiveLine, tail + side, tip); dc.DrawLine(LiveLine, tail - side, tip);
+                var tail = tip - direction * 4;
+                var side = new Vector(-direction.Y, direction.X) * 2;
+                dc.DrawLine(LiveLine, tail + side, tip);
+                dc.DrawLine(LiveLine, tail - side, tip);
             }
-            else dc.DrawEllipse(null, LiveLine, tip, 1, 1);
+            else
+                dc.DrawEllipse(null, LiveLine, tip, 1, 1);
         }
         dc.DrawEllipse(null, NibLine, center, 2, 2);
     }
@@ -131,8 +152,10 @@ public sealed class OrientationGuide : FrameworkElement
     private static Pen Line(string color, double width, DashStyle? dash = null)
     {
         var pen = new Pen(Ui.Brush(color), width);
-        if (dash != null) pen.DashStyle = dash;
-        pen.Freeze(); return pen;
+        if (dash != null)
+            pen.DashStyle = dash;
+        pen.Freeze();
+        return pen;
     }
 
 }

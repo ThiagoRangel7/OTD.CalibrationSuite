@@ -1,10 +1,4 @@
 $ErrorActionPreference = 'Stop'
-function FileHash([string] $path) {
-    $stream = [IO.File]::OpenRead($path)
-    $sha = [Security.Cryptography.SHA256]::Create()
-    try { return [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '') }
-    finally { $sha.Dispose(); $stream.Dispose() }
-}
 $root = Split-Path $PSScriptRoot -Parent
 $definitions = Join-Path $root 'dependencies/otd'
 $pin = Get-Content (Join-Path $definitions 'source.json') -Raw | ConvertFrom-Json
@@ -31,7 +25,7 @@ try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         Invoke-WebRequest -UseBasicParsing -Uri "https://codeload.github.com/OpenTabletDriver/OpenTabletDriver/zip/$($pin.commit)" -OutFile $archive -TimeoutSec 120
     }
-    if ((FileHash $archive) -ne $pin.sha256) {
+    if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $pin.sha256) {
         Remove-Item -LiteralPath $archive
         throw 'OTD source checksum mismatch. Archive removed; retry the build or review the source pin.'
     }
@@ -56,7 +50,8 @@ try {
         }
         foreach ($project in $projects) {
             $file = "$project/$project.csproj"
-            if ((FileHash (Join-Path $destination $file)) -ne (FileHash (Join-Path $definitions $file))) {
+            if ((Get-FileHash -LiteralPath (Join-Path $destination $file) -Algorithm SHA256).Hash -ne
+                (Get-FileHash -LiteralPath (Join-Path $definitions $file) -Algorithm SHA256).Hash) {
                 throw "Pinned build definition differs from upstream: $file. Update definitions with the source pin."
             }
         }

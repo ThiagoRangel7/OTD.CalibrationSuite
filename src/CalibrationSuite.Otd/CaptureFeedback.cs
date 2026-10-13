@@ -2,11 +2,17 @@ using CalibrationSuite.Core;
 
 namespace CalibrationSuite.Otd;
 
-public enum CaptureCue { Waiting, Adjusting, Ready, Capturing, Accepted, Retry }
+public enum CaptureCue
+{
+    Waiting, Adjusting, Ready, Capturing, Accepted, Retry
+}
 
 public sealed record CaptureFeedback(CaptureCue Cue, string Symbol, string Heading, string Hint)
 {
-    public bool PoseReady { get; init; }
+    public bool PoseReady
+    {
+        get; init;
+    }
     public bool ReadyToRetry => Cue == CaptureCue.Retry && PoseReady;
     public CaptureCue GuideCue => Cue == CaptureCue.Accepted
         ? PoseReady ? CaptureCue.Ready : CaptureCue.Adjusting
@@ -18,9 +24,13 @@ public sealed record CaptureFeedback(CaptureCue Cue, string Symbol, string Headi
         bool ready = available && (!state.UsesTilt || reading!.Tilt is { } tilt
             && (state.RequestedTilt is not { } target || OrientationGuidance.WithinTolerance(new(tilt.X, tilt.Y), target, tolerance)));
         CaptureFeedback Feedback(CaptureCue cue, string symbol, string heading, string hint) =>
-            new(cue, symbol, heading, hint) { PoseReady = ready };
+            new(cue, symbol, heading, hint)
+            {
+                PoseReady = ready
+            };
 
-        if (state.Active) return Feedback(CaptureCue.Capturing, "◷", "Capturing",
+        if (state.Active)
+            return Feedback(CaptureCue.Capturing, "◷", "Capturing",
             state.UsesTilt ? "Hold the nib and pen still" : "Hold upright · keep the nib still");
         if (state.BurstStatus == CaptureBurstStatus.Retry)
             return Feedback(CaptureCue.Retry, "↻", ready ? "Ready to retry" : "Try again", ShortReason(state.Message));

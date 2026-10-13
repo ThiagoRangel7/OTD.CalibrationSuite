@@ -18,7 +18,8 @@ public class FilterTests
     {
         var tablet = IntegrationTests.Tablet();
         var d = tablet.Properties.Specifications.Digitizer;
-        d.MaxX = d.MaxY = 1000; d.Width = d.Height = 100;
+        d.MaxX = d.MaxY = 1000;
+        d.Width = d.Height = 100;
         return tablet;
     }
 
@@ -38,7 +39,8 @@ public class FilterTests
         try
         {
             var root = new DirectoryInfo(AppContext.BaseDirectory);
-            while (root != null && !File.Exists(Path.Combine(root.FullName, "CalibrationSuite.slnx"))) root = root.Parent;
+            while (root != null && !File.Exists(Path.Combine(root.FullName, "CalibrationSuite.slnx")))
+                root = root.Parent;
             Assert.NotNull(root);
             var configuration = typeof(FilterTests).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyConfigurationAttribute), false)
                 .Cast<System.Reflection.AssemblyConfigurationAttribute>().Single().Configuration;
@@ -71,8 +73,10 @@ public class FilterTests
         }
         finally
         {
-            AppInfo.PluginManager = previous; AppInfo.Current = previousInfo;
-            if (Directory.Exists(directory)) Directory.Delete(directory, true);
+            AppInfo.PluginManager = previous;
+            AppInfo.Current = previousInfo;
+            if (Directory.Exists(directory))
+                Directory.Delete(directory, true);
         }
     }
 
@@ -80,20 +84,27 @@ public class FilterTests
     public void BoxedStructAndClassRetainFieldsAndEmitSynchronouslyInOrder()
     {
         var filter = Filter();
-        byte[] raw = [1, 2]; bool[] buttons = [true, false];
+        byte[] raw = [1, 2];
+        bool[] buttons = [true, false];
         IDeviceReport a = new TiltTabletReport { Position = new(100, 200), Tilt = new(8, 9), Pressure = 321, Raw = raw, PenButtons = buttons };
-        var b = new Pen { Position = new(500, 500), Tilt = new(0, 0), NearProximity = true, HoverDistance = 3 };
+        var b = new TestPenReport { Position = new(500, 500), Tilt = new(0, 0), NearProximity = true, HoverDistance = 3 };
         var emitted = new List<IDeviceReport>();
         filter.Emit += emitted.Add;
-        filter.Consume(a); Assert.Single(emitted);
+        filter.Consume(a);
+        Assert.Single(emitted);
         filter.Consume(b);
         Assert.Equal(PipelinePosition.PreTransform, filter.Position);
-        Assert.Equal(2, emitted.Count); Assert.Same(a, emitted[0]); Assert.Same(b, emitted[1]);
+        Assert.Equal(2, emitted.Count);
+        Assert.Same(a, emitted[0]);
+        Assert.Same(b, emitted[1]);
         var actual = (TiltTabletReport)a;
         Assert.Equal(new Vector2(98, 197), actual.Position);
-        Assert.Equal(new Vector2(8, 9), actual.Tilt); Assert.Equal(321u, actual.Pressure);
-        Assert.Same(raw, actual.Raw); Assert.Same(buttons, actual.PenButtons);
-        Assert.Equal(new Vector2(498, 497), b.Position); Assert.Equal(3u, b.HoverDistance);
+        Assert.Equal(new Vector2(8, 9), actual.Tilt);
+        Assert.Equal(321u, actual.Pressure);
+        Assert.Same(raw, actual.Raw);
+        Assert.Same(buttons, actual.PenButtons);
+        Assert.Equal(new Vector2(498, 497), b.Position);
+        Assert.Equal(3u, b.HoverDistance);
     }
 
     [Fact]
@@ -104,17 +115,20 @@ public class FilterTests
             new TiltTabletReport { Position = new(500, 500) },
             new TabletReport { Position = new(500, 500) },
             new OutOfRangeReport([4]),
-            new Pen { Position = new(500, 500), NearProximity = false },
-            new Pen { Position = new(500, 500), NearProximity = true, Eraser = true },
+            new TestPenReport { Position = new(500, 500), NearProximity = false },
+            new TestPenReport { Position = new(500, 500), NearProximity = true, Eraser = true },
             new TiltTabletReport { Position = new(500, 500), Tilt = new(float.NaN, 0) },
             new TiltTabletReport { Position = new(float.PositiveInfinity, 0) },
             new Auxiliary { Raw = [6] }, new TiltOnly { Tilt = new(12, 0) }
         ];
         var before = reports.Skip(1).Select(JsonConvert.SerializeObject).ToArray();
-        var emitted = new List<IDeviceReport>(); filter.Emit += emitted.Add;
-        foreach (var report in reports) filter.Consume(report);
+        var emitted = new List<IDeviceReport>();
+        filter.Emit += emitted.Add;
+        foreach (var report in reports)
+            filter.Consume(report);
         Assert.Equal(reports.Length, emitted.Count);
-        for (int i = 0; i < reports.Length; i++) Assert.Same(reports[i], emitted[i]);
+        for (int i = 0; i < reports.Length; i++)
+            Assert.Same(reports[i], emitted[i]);
         Assert.Equal(before, reports.Skip(1).Select(JsonConvert.SerializeObject));
     }
 
@@ -135,12 +149,14 @@ public class FilterTests
     {
         var messages = new List<LogMessage>();
         EventHandler<LogMessage> listener = (_, m) => messages.Add(m);
-        Log.Output += listener; messages.Clear();
+        Log.Output += listener;
+        messages.Clear();
         try
         {
             var filter = new CalibrationFilter { CalibrationJson = CoreFixtures.Data().ToJson() };
             filter.Initialize();
-            filter.Tablet = IntegrationTests.Tablet(); filter.Initialize();
+            filter.Tablet = IntegrationTests.Tablet();
+            filter.Initialize();
             IDeviceReport report = new TiltTabletReport { Position = new(500, 500) };
             filter.Consume(report);
             Assert.Equal(new Vector2(500, 500), ((IAbsolutePositionReport)report).Position);
@@ -169,33 +185,29 @@ public class FilterTests
     [Fact]
     public void PersistentUnsupportedInputLogsOnceAndEligiblePathDoesNotAllocate()
     {
-        var filter = Filter(); var messages = new List<LogMessage>();
+        var filter = Filter();
+        var messages = new List<LogMessage>();
         EventHandler<LogMessage> listener = (_, m) => messages.Add(m);
-        Log.Output += listener; messages.Clear();
+        Log.Output += listener;
+        messages.Clear();
         try
         {
             IDeviceReport missing = new TabletReport();
-            for (int i = 0; i < 1000; i++) filter.Consume(missing);
+            for (int i = 0; i < 1000; i++)
+                filter.Consume(missing);
             Assert.Single(messages);
             IDeviceReport valid = new TiltTabletReport { Position = new(500, 500) };
-            for (int i = 0; i < 1000; i++) filter.Consume(valid);
+            for (int i = 0; i < 1000; i++)
+                filter.Consume(valid);
             long start = GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 0; i < 1000; i++) filter.Consume(valid);
+            for (int i = 0; i < 1000; i++)
+                filter.Consume(valid);
             Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - start);
             Assert.Single(messages);
         }
         finally { Log.Output -= listener; }
     }
 
-    private sealed class Pen : IAbsolutePositionReport, ITiltReport, IProximityReport, IEraserReport
-    {
-        public byte[] Raw { get; set; } = [];
-        public Vector2 Position { get; set; }
-        public Vector2 Tilt { get; set; }
-        public bool NearProximity { get; set; }
-        public uint HoverDistance { get; set; }
-        public bool Eraser { get; set; }
-    }
     private sealed class ScalingOutput : OutputMode
     {
         public IDeviceReport? Last { get; private set; }
@@ -207,7 +219,10 @@ public class FilterTests
         }
         protected override void OnOutput(IDeviceReport report) => Last = report;
     }
-    private sealed class Auxiliary : IDeviceReport { public byte[] Raw { get; set; } = []; }
+    private sealed class Auxiliary : IDeviceReport
+    {
+        public byte[] Raw { get; set; } = [];
+    }
     private sealed class TiltOnly : ITiltReport
     {
         public byte[] Raw { get; set; } = [];

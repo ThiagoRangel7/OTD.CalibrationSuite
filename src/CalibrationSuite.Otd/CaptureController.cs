@@ -4,17 +4,45 @@ using CalibrationSuite.Core;
 namespace CalibrationSuite.Otd;
 
 public sealed record CaptureProgress(int Index, int Captured, int Total, Point2 Target, RequestedPose Pose,
-    bool Active, int BurstSamples, bool Complete, string Message)
+    int BurstSamples, bool Complete, string Message)
 {
-    public CaptureBurstStatus BurstStatus { get; init; }
-    public double BurstProgress { get; init; }
-    public double BurstDurationMs { get; init; }
-    public double? AcceptedAtMs { get; init; }
-    public int? AcceptedIndex { get; init; }
-    public bool UsesTilt { get; init; }
-    public bool? ReportsTilt { get; init; }
-    public Point2? ReferenceTilt { get; init; }
-    public Point2? RequestedTilt { get; init; }
+    public CaptureBurstStatus BurstStatus
+    {
+        get; init;
+    }
+    public bool Active => BurstStatus == CaptureBurstStatus.Capturing;
+    public double BurstProgress
+    {
+        get; init;
+    }
+    public double BurstDurationMs
+    {
+        get; init;
+    }
+    public double? AcceptedAtMs
+    {
+        get; init;
+    }
+    public int? AcceptedIndex
+    {
+        get; init;
+    }
+    public bool UsesTilt
+    {
+        get; init;
+    }
+    public bool? ReportsTilt
+    {
+        get; init;
+    }
+    public Point2? ReferenceTilt
+    {
+        get; init;
+    }
+    public Point2? RequestedTilt
+    {
+        get; init;
+    }
 }
 
 // The lock only joins UI commands with the serialized acquisition consumer. WPF never samples a burst.
@@ -37,7 +65,8 @@ public sealed class CaptureController
     {
         lock (sync)
         {
-            if (draft.Complete) return;
+            if (draft.Complete)
+                return;
             double time = reading.Timestamp * 1000.0 / Stopwatch.Frequency;
             if (reading.Kind == ReadingKind.Auxiliary)
             {
@@ -52,14 +81,20 @@ public sealed class CaptureController
             if (reportsTilt == null)
             {
                 reportsTilt = reading.Tilt.HasValue;
-                if (reportsTilt == false) draft.UsePositionOnly();
+                if (reportsTilt == false)
+                    draft.UsePositionOnly();
             }
-            if (draft.UsesTilt && reading.Tilt == null) { burst.Reject(time, "Tilt missing from pen report"); return; }
+            if (draft.UsesTilt && reading.Tilt == null)
+            {
+                burst.Reject(time, "Tilt missing from pen report");
+                return;
+            }
 
             var position = reading.Position.Value;
             var tilt = reading.Tilt ?? default;
             var sample = burst.Add(time, new(position.X, position.Y), new(tilt.X, tilt.Y));
-            if (sample == null) return;
+            if (sample == null)
+                return;
             try
             {
                 int index = draft.CurrentIndex;
@@ -72,7 +107,8 @@ public sealed class CaptureController
 
     public bool Start(double now)
     {
-        lock (sync) return !draft.Complete && burst.Start(draft.RequestedTilt, now);
+        lock (sync)
+            return !draft.Complete && burst.Start(draft.RequestedTilt, now);
     }
 
     public void Previous()
@@ -97,7 +133,8 @@ public sealed class CaptureController
 
     public void Stop()
     {
-        lock (sync) burst.Cancel("Burst cancelled. Completed measurements are preserved.");
+        lock (sync)
+            burst.Cancel("Burst cancelled. Completed measurements are preserved.");
     }
 
     public CaptureProgress Snapshot(double now)
@@ -106,7 +143,7 @@ public sealed class CaptureController
         {
             burst.CheckTimeout(now);
             return new(draft.CurrentIndex, draft.CapturedCount, draft.Total, draft.CurrentTarget, draft.CurrentPose,
-                burst.Active, burst.Count, draft.Complete, burst.Message)
+                burst.Count, draft.Complete, burst.Message)
             {
                 BurstStatus = burst.Status,
                 BurstProgress = burst.Progress,

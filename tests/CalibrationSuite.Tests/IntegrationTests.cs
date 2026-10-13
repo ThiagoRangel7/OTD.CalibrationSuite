@@ -65,9 +65,11 @@ public class IntegrationTests
     [Fact]
     public void ReconstructionDoesNotGuessUnknownOrMalformedTypes()
     {
-        var report = Report(Tablet()); report.Path = "Does.Not.Exist";
+        var report = Report(Tablet());
+        report.Path = "Does.Not.Exist";
         Assert.Contains(report.Path, Assert.Throws<InvalidOperationException>(() => ReportReadingFactory.Read(report, 0)).Message);
-        report.Path = typeof(TiltTabletReport).FullName; report.Data = new JValue("invalid");
+        report.Path = typeof(TiltTabletReport).FullName;
+        report.Data = new JValue("invalid");
         Assert.Throws<InvalidOperationException>(() => ReportReadingFactory.Read(report, 0));
     }
 
@@ -88,10 +90,14 @@ public class IntegrationTests
         var filter = new CalibrationFilter();
         IDeviceReport a = new TiltTabletReport { Raw = [], Position = new(1, 2) };
         IDeviceReport b = new TabletReport { Raw = [], Position = new(3, 4) };
-        var emitted = new List<IDeviceReport>(); filter.Emit += emitted.Add;
-        filter.Consume(a); filter.Consume(b);
+        var emitted = new List<IDeviceReport>();
+        filter.Emit += emitted.Add;
+        filter.Consume(a);
+        filter.Consume(b);
         Assert.Equal(PipelinePosition.PreTransform, filter.Position);
-        Assert.Equal(2, emitted.Count); Assert.Same(a, emitted[0]); Assert.Same(b, emitted[1]);
+        Assert.Equal(2, emitted.Count);
+        Assert.Same(a, emitted[0]);
+        Assert.Same(b, emitted[1]);
         Assert.Equal(new Vector2(1, 2), ((IAbsolutePositionReport)a).Position);
     }
 

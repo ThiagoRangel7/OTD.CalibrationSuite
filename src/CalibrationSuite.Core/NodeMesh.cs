@@ -29,9 +29,11 @@ public sealed class NodeMesh
             throw new CalibrationException("Require one position sample or at least four tilt samples, with finite positions, tilts, and target.");
         var sorted = samples.Length == 1 ? samples : samples.OrderBy(s => s.Tilt.X).ThenBy(s => s.Tilt.Y).ToArray();
         var errors = sorted.Select(s => s.Position - target).ToArray();
-        if (errors.Any(e => !e.IsFinite)) throw new CalibrationException("Measured position errors overflow.");
+        if (errors.Any(e => !e.IsFinite))
+            throw new CalibrationException("Measured position errors overflow.");
         // A single measured error is constant in tilt; the spatial blend needs no special case.
-        if (samples.Length == 1) return new([], errors, [], []);
+        if (samples.Length == 1)
+            return new([], errors, [], []);
 
         var tilts = sorted.Select(s => s.Tilt).ToArray();
         var indices = new Dictionary<Point2, int>();
@@ -42,7 +44,10 @@ public sealed class NodeMesh
         var coordinates = tilts.Select(p => new Coordinate(p.X, p.Y)).ToArray();
         builder.SetSites(coordinates);
         GeometryCollection mesh;
-        try { mesh = builder.GetTriangles(new GeometryFactory()); }
+        try
+        {
+            mesh = builder.GetTriangles(new GeometryFactory());
+        }
         catch (Exception ex) { throw new CalibrationException($"Unusable tilt geometry: {ex.Message}"); }
         var triangles = new List<Triangle>();
         Span<int> ids = stackalloc int[3];
@@ -51,10 +56,12 @@ public sealed class NodeMesh
         {
             var polygon = mesh.GetGeometryN(i);
             var vertices = polygon.Coordinates;
-            for (int j = 0; j < ids.Length; j++) ids[j] = indices[new Point2(vertices[j].X, vertices[j].Y)];
+            for (int j = 0; j < ids.Length; j++)
+                ids[j] = indices[new Point2(vertices[j].X, vertices[j].Y)];
             ids.Sort();
             int a = ids[0], b = ids[1], c = ids[2];
-            if (Side(tilts[a], tilts[b], tilts[c]) < 0) (b, c) = (c, b);
+            if (Side(tilts[a], tilts[b], tilts[c]) < 0)
+                (b, c) = (c, b);
             var ab = tilts[b] - tilts[a];
             var ac = tilts[c] - tilts[a];
             double area = Point2.Cross(ab, ac);
@@ -87,16 +94,20 @@ public sealed class NodeMesh
 
     public Point2 Evaluate(Point2 tilt)
     {
-        if (!tilt.IsFinite) return default;
-        if (errors.Length == 1) return errors[0];
+        if (!tilt.IsFinite)
+            return default;
+        if (errors.Length == 1)
+            return errors[0];
         foreach (var triangle in triangles)
         {
             // Bounds reject unrelated triangles cheaply; the robust predicates still
             // decide inclusion at edges and nearly collinear measured vertices.
-            if (!triangle.Bounds.Covers(tilt.X, tilt.Y)) continue;
+            if (!triangle.Bounds.Covers(tilt.X, tilt.Y))
+                continue;
             int a = triangle.A, b = triangle.B, c = triangle.C;
             if (Side(tilts[a], tilts[b], tilt) < 0 || Side(tilts[b], tilts[c], tilt) < 0
-                || Side(tilts[c], tilts[a], tilt) < 0) continue;
+                || Side(tilts[c], tilts[a], tilt) < 0)
+                continue;
             var at = tilt - tilts[a];
             double v = Point2.Cross(at, triangle.AC) * triangle.InverseArea;
             double w = Point2.Cross(triangle.AB, at) * triangle.InverseArea;

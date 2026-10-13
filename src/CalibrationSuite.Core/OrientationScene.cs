@@ -56,9 +56,11 @@ public static class CaptureOverlay
         foreach (var corner in corners)
         {
             var bounds = new OverlayBounds(corner.X, corner.Y, panelWidth, panelHeight);
-            if (avoid is { } occupied && bounds.Overlaps(occupied, 8)) continue;
+            if (avoid is { } occupied && bounds.Overlaps(occupied, 8))
+                continue;
             double nextDistance = bounds.DistanceTo(target);
-            if (nextDistance <= distance) continue;
+            if (nextDistance <= distance)
+                continue;
             best = bounds;
             distance = nextDistance;
         }

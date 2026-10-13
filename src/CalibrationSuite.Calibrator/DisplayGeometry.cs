@@ -11,7 +11,8 @@ public sealed record DisplayGeometry(int Left, int Top, int Width, int Height)
         // Windows selects the monitor with the largest intersection, or the nearest monitor.
         var monitor = MonitorFromWindow(new WindowInteropHelper(window).Handle, 2);
         var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
-        if (!GetMonitorInfo(monitor, ref info)) throw new System.ComponentModel.Win32Exception();
+        if (!GetMonitorInfo(monitor, ref info))
+            throw new System.ComponentModel.Win32Exception();
         var rect = info.Monitor;
         return new(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
     }
@@ -23,9 +24,15 @@ public sealed record DisplayGeometry(int Left, int Top, int Width, int Height)
     }
 
     [StructLayout(LayoutKind.Sequential)]
-    private struct Rect { public int Left, Top, Right, Bottom; }
+    private struct Rect
+    {
+        public int Left, Top, Right, Bottom;
+    }
     [StructLayout(LayoutKind.Sequential)]
-    private struct MonitorInfo { public int Size; public Rect Monitor, Work; public uint Flags; }
+    private struct MonitorInfo
+    {
+        public int Size; public Rect Monitor, Work; public uint Flags;
+    }
     [DllImport("user32.dll")]
     private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint flags);
     [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]

@@ -29,7 +29,8 @@ public class CalibrationDataTests
     public void EmptyAndIdentityDataArePassThrough(string json)
     {
         var prepared = PreparedCalibration.Load(json, Geometry, out var diagnostic);
-        Assert.True(prepared.IsIdentity); Assert.Null(diagnostic);
+        Assert.True(prepared.IsIdentity);
+        Assert.Null(diagnostic);
         Assert.Equal(new Point2(-20, 2000), prepared.Correct(new(-20, 2000), new(32, 9)));
     }
 
@@ -61,7 +62,8 @@ public class CalibrationDataTests
         var root = JsonNode.Parse(Data().ToJson())!;
         var pieces = path.Split('.');
         var parent = root;
-        foreach (string part in pieces[..^1]) parent = int.TryParse(part, out int index) ? parent[index]! : parent[part]!;
+        foreach (string part in pieces[..^1])
+            parent = int.TryParse(part, out int index) ? parent[index]! : parent[part]!;
         parent.AsObject().Remove(pieces[^1]);
         Assert.True(PreparedCalibration.Load(root.ToJsonString(), Geometry, out var diagnostic).IsIdentity);
         Assert.NotNull(diagnostic);
@@ -73,7 +75,8 @@ public class CalibrationDataTests
     [InlineData("nodes")]
     public void ExplicitNullMeasuredSectionsAreRejected(string field)
     {
-        var root = JsonNode.Parse(Data().ToJson())!; root[field] = null;
+        var root = JsonNode.Parse(Data().ToJson())!;
+        root[field] = null;
         Assert.True(PreparedCalibration.Load(root.ToJsonString(), Geometry, out var diagnostic).IsIdentity);
         Assert.NotNull(diagnostic);
     }
@@ -86,11 +89,15 @@ public class CalibrationDataTests
         var sample = root["nodes"]![0]![0]!["samples"]![0]!;
         sample["requestedPose"] = new JsonObject { ["altitudeDeg"] = 12, ["azimuthDeg"] = 57 };
         var prepared = PreparedCalibration.Load(root.ToJsonString(), Geometry, out var diagnostic);
-        Assert.Null(diagnostic); Near(new(498, 497), prepared.Correct(new(500, 500), new(13, -21)));
+        Assert.Null(diagnostic);
+        Near(new(498, 497), prepared.Correct(new(500, 500), new(13, -21)));
     }
 
     [Theory]
-    [InlineData(0)] [InlineData(1)] [InlineData(2)] [InlineData(3)]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
     public void AllGeometryFieldsUseRelativeTolerance(int field)
     {
         SourceGeometry Change(double factor) => field switch
@@ -108,7 +115,11 @@ public class CalibrationDataTests
     public void GeometryToleranceDoesNotRescaleOrRejectRecordedGridEndpoints()
     {
         var prepared = PreparedCalibration.Prepare(Data(rows: [0, 1000], columns: [0, 1000]),
-            Geometry with { MaxX = 999.9995, MaxY = 999.9995 });
+            Geometry with
+            {
+                MaxX = 999.9995,
+                MaxY = 999.9995
+            });
         Near(new(998, 997), prepared.Correct(new(1000, 1000), default));
     }
 
@@ -131,14 +142,16 @@ public class CalibrationDataTests
             Assert.Throws<CalibrationException>(() => PreparedCalibration.Prepare(Data(rows: axis), Geometry));
         Assert.Throws<CalibrationException>(() => PreparedCalibration.Prepare(Data() with { Nodes = [] }, Geometry));
         Assert.Throws<CalibrationException>(() => PreparedCalibration.Prepare(Data() with { SourceGeometry = Geometry with { WidthMm = 0 } }, Geometry));
-        var data = Data(); data.Nodes![1][0].Samples[0] = new(new(double.PositiveInfinity, 3), new(-40, -40));
+        var data = Data();
+        data.Nodes![1][0].Samples[0] = new(new(double.PositiveInfinity, 3), new(-40, -40));
         Assert.Contains("Node [1][0]", Assert.Throws<CalibrationException>(() => PreparedCalibration.Prepare(data, Geometry)).Message);
     }
 
     [Fact]
     public void PreparedSnapshotIsUnaffectedByEditsToSourceArrays()
     {
-        var data = Data(); var prepared = PreparedCalibration.Prepare(data, Geometry);
+        var data = Data();
+        var prepared = PreparedCalibration.Prepare(data, Geometry);
         data.Grid!.PreTransformRowCoordinates[0] = 800;
         data.Nodes![0][0].Samples[0] = new(new(999, 999), new(999, 999));
         data.Nodes[1] = [];

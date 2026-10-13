@@ -10,24 +10,34 @@ public sealed class PreparedCalibration
 
     private PreparedCalibration(double[] rows, double[] columns, NodeMesh[,] nodes, bool requiresTilt)
     {
-        this.rows = rows; this.columns = columns; this.nodes = nodes; RequiresTilt = requiresTilt;
+        this.rows = rows;
+        this.columns = columns;
+        this.nodes = nodes;
+        RequiresTilt = requiresTilt;
     }
 
     public static PreparedCalibration Load(string? json, SourceGeometry geometry, out string? diagnostic)
     {
         diagnostic = null;
-        if (string.IsNullOrWhiteSpace(json)) return Identity;
-        try { return Prepare(CalibrationData.Parse(json), geometry); }
+        if (string.IsNullOrWhiteSpace(json))
+            return Identity;
+        try
+        {
+            return Prepare(CalibrationData.Parse(json), geometry);
+        }
         catch (CalibrationException ex) { diagnostic = ex.Message; return Identity; }
     }
 
     public static PreparedCalibration Prepare(CalibrationData data, SourceGeometry geometry)
     {
-        if (data.Mode == "identity") return Identity;
-        if (data.Mode != "measured") throw new CalibrationException("Unsupported calibration mode.");
+        if (data.Mode == "identity")
+            return Identity;
+        if (data.Mode != "measured")
+            throw new CalibrationException("Unsupported calibration mode.");
         if (data.SourceGeometry == null || data.Grid == null || data.Nodes == null)
             throw new CalibrationException("Measured data requires sourceGeometry, grid, and nodes.");
-        geometry.Validate(); data.SourceGeometry.Validate();
+        geometry.Validate();
+        data.SourceGeometry.Validate();
         if (!data.SourceGeometry.Matches(geometry))
             throw new CalibrationException("Calibration geometry does not match this tablet; recalibration is required.");
         var rows = ValidateAxis(data.Grid.PreTransformRowCoordinates, data.SourceGeometry.MaxY, "row");
@@ -52,7 +62,8 @@ public sealed class PreparedCalibration
 
     private static double[] ValidateAxis(double[] values, double maximum, string name)
     {
-        if (values == null || values.Length < 2) throw new CalibrationException($"Require at least two {name} coordinates.");
+        if (values == null || values.Length < 2)
+            throw new CalibrationException($"Require at least two {name} coordinates.");
         for (int i = 0; i < values.Length; i++)
             if (!double.IsFinite(values[i]) || values[i] < 0 || values[i] > maximum || (i > 0 && values[i] <= values[i - 1]))
                 throw new CalibrationException($"Grid {name} coordinates must be finite, strictly increasing, and within digitizer bounds.");
@@ -61,8 +72,10 @@ public sealed class PreparedCalibration
 
     public Point2 Correct(Point2 position, Point2 tilt)
     {
-        if (IsIdentity || !position.IsFinite || RequiresTilt && !tilt.IsFinite) return position;
-        if (!RequiresTilt) tilt = default;
+        if (IsIdentity || !position.IsFinite || RequiresTilt && !tilt.IsFinite)
+            return position;
+        if (!RequiresTilt)
+            tilt = default;
         var (r, v) = Locate(rows, position.Y);
         var (c, u) = Locate(columns, position.X);
         var error = nodes[r, c].Evaluate(tilt) * ((1 - u) * (1 - v))

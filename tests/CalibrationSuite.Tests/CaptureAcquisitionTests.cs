@@ -55,8 +55,10 @@ public class CaptureAcquisitionTests
             Assert.True(controller.Start(CaptureController.Now));
             daemon.Send(Report(daemon));
             await WaitUntil(() => controller.Snapshot(CaptureController.Now).BurstSamples == 1);
-            if (disconnect) daemon.Invalidate();
-            else acquisition.Cancel("User cancelled");
+            if (disconnect)
+                daemon.Invalidate();
+            else
+                acquisition.Cancel("User cancelled");
 
             string result = await run.WaitAsync(TimeSpan.FromSeconds(3));
             Assert.Contains(disconnect ? "disconnected" : "User cancelled", result);
@@ -77,6 +79,7 @@ public class CaptureAcquisitionTests
     private static async Task WaitUntil(Func<bool> condition)
     {
         using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-        while (!condition()) await Task.Delay(5, deadline.Token);
+        while (!condition())
+            await Task.Delay(5, deadline.Token);
     }
 }

@@ -51,10 +51,22 @@ public sealed record CalibrationGrid(
 // These are editable serialization models. Preparation copies all evaluator inputs.
 public sealed record CalibrationData
 {
-    public required string Mode { get; init; }
-    public SourceGeometry? SourceGeometry { get; init; }
-    public CalibrationGrid? Grid { get; init; }
-    public CalibrationNode[][]? Nodes { get; init; }
+    public required string Mode
+    {
+        get; init;
+    }
+    public SourceGeometry? SourceGeometry
+    {
+        get; init;
+    }
+    public CalibrationGrid? Grid
+    {
+        get; init;
+    }
+    public CalibrationNode[][]? Nodes
+    {
+        get; init;
+    }
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

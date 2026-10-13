@@ -89,13 +89,22 @@ public class CaptureOwnershipTests
     [Fact]
     public void ExtremeTiltCountsAreRejectedWhileUprightOnlyIgnoresUnusedDirections()
     {
-        var settings = Settings with { TiltDirections = int.MaxValue, TiltLevels = 2, TiltTolerance = 1e-9 };
+        var settings = Settings with
+        {
+            TiltDirections = int.MaxValue,
+            TiltLevels = 2,
+            TiltTolerance = 1e-9
+        };
         Assert.Throws<CalibrationException>(() => settings.Validate());
-        (settings with { TiltLevels = 0 }).Validate();
+        (settings with
+        {
+            TiltLevels = 0
+        }).Validate();
     }
 
     private static void Fill(CaptureDraft draft)
     {
-        while (!draft.Complete) draft.Store(new(draft.CurrentTarget, default));
+        while (!draft.Complete)
+            draft.Store(new(draft.CurrentTarget, default));
     }
 }

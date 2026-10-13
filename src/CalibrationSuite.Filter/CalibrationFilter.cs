@@ -33,7 +33,8 @@ public sealed class CalibrationFilter : IPositionedPipelineElement<IDeviceReport
                 ?? throw new CalibrationException("Tablet digitizer geometry was not injected.");
             calibration = PreparedCalibration.Load(CalibrationJson,
                 new(digitizer.MaxX, digitizer.MaxY, digitizer.Width, digitizer.Height), out var diagnostic);
-            if (diagnostic != null) Log.Write("Calibration Suite", diagnostic + " Using identity.", LogLevel.Warning);
+            if (diagnostic != null)
+                Log.Write("Calibration Suite", diagnostic + " Using identity.", LogLevel.Warning);
         }
         catch (Exception ex)
         {
@@ -45,7 +46,8 @@ public sealed class CalibrationFilter : IPositionedPipelineElement<IDeviceReport
     public event Action<IDeviceReport>? Emit;
     public void Consume(IDeviceReport report)
     {
-        if (!calibration.IsIdentity) CorrectPosition(report);
+        if (!calibration.IsIdentity)
+            CorrectPosition(report);
         Emit?.Invoke(report);
     }
 
@@ -56,18 +58,15 @@ public sealed class CalibrationFilter : IPositionedPipelineElement<IDeviceReport
 
         if (report is not IAbsolutePositionReport position)
         {
-            if (report is IAbsolutePositionReport or ITiltReport) Unsupported();
+            if (report is ITiltReport)
+                Unsupported();
             return;
         }
 
         var raw = position.Position;
-        var orientation = Vector2.Zero;
-        if (calibration.RequiresTilt)
-        {
-            if (report is not ITiltReport tilt) { Unsupported(); return; }
-            orientation = tilt.Tilt;
-        }
-        if (!PreviewGeometry.Finite(raw) || !PreviewGeometry.Finite(orientation))
+        var orientation = calibration.RequiresTilt && report is ITiltReport tilt ? tilt.Tilt : Vector2.Zero;
+        if (calibration.RequiresTilt && report is not ITiltReport
+            || !PreviewGeometry.Finite(raw) || !PreviewGeometry.Finite(orientation))
         {
             Unsupported();
             return;

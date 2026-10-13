@@ -29,7 +29,8 @@ public class UprightCalibrationTests
         var roundTrip = CalibrationData.Parse(json);
         Assert.Equal(new Point2(1, -2), Assert.Single(roundTrip.Nodes![0][0].Samples).Tilt);
         var prepared = PreparedCalibration.Load(json, Geometry, out var diagnostic);
-        Assert.Null(diagnostic); Assert.False(prepared.IsIdentity);
+        Assert.Null(diagnostic);
+        Assert.False(prepared.IsIdentity);
         Near(new(450, 400), prepared.Correct(new(500, 500), new(30, -20)));
         Near(new(450, 400), prepared.Correct(new(500, 500), default));
         Near(new(-35, 930), prepared.Correct(new(-20, 1100), new(-45, 60)));
@@ -53,7 +54,8 @@ public class UprightCalibrationTests
             Assert.Throws<CalibrationException>(() => NodeMesh.Prepare(Samples(default, t => t).Take(count).ToArray(), default));
         Assert.Throws<CalibrationException>(() => NodeMesh.Prepare([new(new(double.NaN, 0), default)], default));
         Assert.Throws<CalibrationException>(() => NodeMesh.Prepare([new(default, new(0, double.PositiveInfinity))], default));
-        var data = Data(); data.Nodes![0][0] = new([new(new(154, 158), new(1, 2))]);
+        var data = Data();
+        data.Nodes![0][0] = new([new(new(154, 158), new(1, 2))]);
         var prepared = PreparedCalibration.Prepare(data, Geometry);
         Assert.Equal(new Point2(500, 500), prepared.Correct(new(500, 500), new(double.NaN, 0)));
     }

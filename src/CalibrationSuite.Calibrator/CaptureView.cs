@@ -15,9 +15,8 @@ public sealed class CaptureView : Grid
     private readonly Canvas canvas = new();
     private readonly Border hud;
     private readonly Border details;
-    private readonly StackPanel panel = new();
     private readonly OrientationGuide guide = new();
-    private readonly StackPanel feedback = new() { Name = "CrosshairFeedback", Width = 200, Height = 64 };
+    private readonly StackPanel feedback;
     private readonly TextBlock address = Text("", 15), count = Text("", 12, true);
     private readonly TextBlock symbol = Text("", 20), heading = Text("", 14), hint = Text("", 12);
     private readonly TextBlock requested = Text("", 13), current = Text("", 13);
@@ -40,40 +39,71 @@ public sealed class CaptureView : Grid
 
     public CaptureView(CaptureSettings settings, SourceGeometry geometry, string tabletName)
     {
-        this.settings = settings; this.geometry = geometry;
-        Background = Ui.Brush("#101A28"); IsHitTestVisible = false;
-        Children.Add(canvas); canvas.Children.Add(guide);
-        var summary = new StackPanel();
-        var device = Text(tabletName, 11, true); device.TextWrapping = TextWrapping.NoWrap; device.TextTrimming = TextTrimming.CharacterEllipsis;
-        summary.Children.Add(device); address.FontWeight = FontWeights.SemiBold; summary.Children.Add(address);
-        count.Margin = new(0, 3, 0, 4); summary.Children.Add(count); summary.Children.Add(overall);
-        panel.Children.Add(summary);
-        var cueLine = new Grid();
-        cueLine.ColumnDefinitions.Add(new() { Width = new(28) }); cueLine.ColumnDefinitions.Add(new());
-        symbol.VerticalAlignment = VerticalAlignment.Center; cueLine.Children.Add(symbol);
-        heading.FontWeight = FontWeights.SemiBold; heading.VerticalAlignment = VerticalAlignment.Center;
-        heading.TextWrapping = TextWrapping.NoWrap; heading.TextTrimming = TextTrimming.CharacterEllipsis;
-        SetColumn(heading, 1); cueLine.Children.Add(heading); feedback.Children.Add(cueLine);
-        hint.Height = 34; hint.LineHeight = 16; hint.TextTrimming = TextTrimming.CharacterEllipsis;
-        feedback.Children.Add(hint);
-        canvas.Children.Add(feedback);
-        var angles = new StackPanel { Margin = new(0, 2, 0, 6) };
-        angles.Children.Add(requested); angles.Children.Add(current); panel.Children.Add(angles);
-        var secondary = new StackPanel(); raw.Margin = new(0, 0, 0, 8); secondary.Children.Add(raw);
-        keys.Foreground = Ui.Brush("#DDE9F8"); secondary.Children.Add(keys);
-        hud = new Border { Name = "CaptureSummary", Child = panel, CornerRadius = new(12), Background = Ui.Brush("#1C2A3D"), BorderBrush = Ui.Brush("#40546F"), BorderThickness = new(1), Padding = new(16) };
-        canvas.Children.Add(hud);
+        this.settings = settings;
+        this.geometry = geometry;
+        Background = Ui.Brush("#101A28");
+        IsHitTestVisible = false;
+        Children.Add(canvas);
+        var device = Text(tabletName, 11, true);
+        device.TextWrapping = TextWrapping.NoWrap;
+        device.TextTrimming = TextTrimming.CharacterEllipsis;
+        address.FontWeight = FontWeights.SemiBold;
+        count.Margin = new(0, 3, 0, 4);
+        symbol.VerticalAlignment = VerticalAlignment.Center;
+        heading.FontWeight = FontWeights.SemiBold;
+        heading.VerticalAlignment = VerticalAlignment.Center;
+        heading.TextWrapping = TextWrapping.NoWrap;
+        heading.TextTrimming = TextTrimming.CharacterEllipsis;
+        SetColumn(heading, 1);
+        hint.Height = 34;
+        hint.LineHeight = 16;
+        hint.TextTrimming = TextTrimming.CharacterEllipsis;
+        feedback = new StackPanel
+        {
+            Name = "CrosshairFeedback",
+            Width = 200,
+            Height = 64,
+            Children =
+            {
+                new Grid
+                {
+                    ColumnDefinitions = { new() { Width = new(28) }, new() },
+                    Children = { symbol, heading }
+                },
+                hint
+            }
+        };
+        hud = new Border
+        {
+            Name = "CaptureSummary",
+            CornerRadius = new(12),
+            Background = Ui.Brush("#1C2A3D"),
+            BorderBrush = Ui.Brush("#40546F"),
+            BorderThickness = new(1),
+            Padding = new(16),
+            Child = new StackPanel
+            {
+                Children =
+                {
+                    new StackPanel { Children = { device, address, count, overall } },
+                    new StackPanel { Margin = new(0, 2, 0, 6), Children = { requested, current } }
+                }
+            }
+        };
+        raw.Margin = new(0, 0, 0, 8);
+        keys.Foreground = Ui.Brush("#DDE9F8");
         details = new Border
         {
             Name = "CaptureDetails",
-            Child = secondary,
+            Child = new StackPanel { Children = { raw, keys } },
             CornerRadius = new(10),
             Background = Ui.Brush("#1C2A3D"),
             BorderBrush = Ui.Brush("#40546F"),
             BorderThickness = new(1),
             Padding = new(12)
         };
-        canvas.Children.Add(details);
+        foreach (var element in new UIElement[] { guide, feedback, hud, details })
+            canvas.Children.Add(element);
         SizeChanged += (_, _) => Place();
     }
 
@@ -92,11 +122,17 @@ public sealed class CaptureView : Grid
             CaptureCue.Retry or CaptureCue.Adjusting => "#FFD18B",
             _ => "#91A0B5"
         });
-        symbol.Text = cue.Symbol; symbol.Foreground = color; heading.Text = cue.Heading; heading.Foreground = color; hint.Text = cue.Hint;
+        symbol.Text = cue.Symbol;
+        symbol.Foreground = color;
+        heading.Text = cue.Heading;
+        heading.Foreground = color;
+        hint.Text = cue.Hint;
         if (cue.Cue == CaptureCue.Accepted && state.AcceptedIndex is { } acceptedIndex)
             hint.Text = $"Target {acceptedIndex / poseCount + 1} · pose {acceptedIndex % poseCount + 1} captured";
         address.Text = $"Target {state.Index / poseCount + 1} / {settings.RowCount * settings.ColumnCount} · Pose {state.Index % poseCount + 1} / {poseCount}";
-        count.Text = $"{state.Captured} / {state.Total} measurements"; overall.Maximum = state.Total; overall.Value = state.Captured;
+        count.Text = $"{state.Captured} / {state.Total} measurements";
+        overall.Maximum = state.Total;
+        overall.Value = state.Captured;
         requested.Text = !state.UsesTilt ? "Upright positions only" : state.RequestedTilt is { } targetTilt
             ? $"Tilt target: ({targetTilt.X:F1}; {targetTilt.Y:F1})" : "Reference: hold a comfortable pose";
         current.Text = state.ReportsTilt == false ? "OTD reports no tilt · tilt blocked"
@@ -113,7 +149,8 @@ public sealed class CaptureView : Grid
 
     private void Place()
     {
-        if (snapshot == null || ActualWidth <= 0 || ActualHeight <= 0) return;
+        if (snapshot == null || ActualWidth <= 0 || ActualHeight <= 0)
+            return;
         bool compact = ActualHeight < 560;
         double margin = compact ? 12 : 24;
         if (layoutSize != RenderSize)
@@ -123,7 +160,8 @@ public sealed class CaptureView : Grid
             hud.Padding = new(compact ? 10 : 16);
             address.FontSize = compact ? 12 : 15;
             count.FontSize = compact ? 11 : 12;
-            foreach (var text in new[] { raw, keys, requested, current }) text.FontSize = compact ? 11 : 13;
+            foreach (var text in new[] { raw, keys, requested, current })
+                text.FontSize = compact ? 11 : 13;
             raw.LineHeight = keys.LineHeight = compact ? 13 : 17;
             details.Width = hud.Width;
             details.Padding = new(compact ? 9 : 12);
@@ -139,9 +177,11 @@ public sealed class CaptureView : Grid
         double hudHeight = hud.DesiredSize.Height, detailsHeight = details.DesiredSize.Height;
         var target = new Point2(local.X, local.Y);
         var primary = CaptureOverlay.Place(ActualWidth, ActualHeight, target, hud.Width, hudHeight, margin);
-        Canvas.SetLeft(hud, primary.Left); Canvas.SetTop(hud, primary.Top);
+        Canvas.SetLeft(hud, primary.Left);
+        Canvas.SetTop(hud, primary.Top);
         var secondary = CaptureOverlay.Place(ActualWidth, ActualHeight, target, details.Width, detailsHeight, margin, primary);
-        Canvas.SetLeft(details, secondary.Left); Canvas.SetTop(details, secondary.Top);
+        Canvas.SetLeft(details, secondary.Left);
+        Canvas.SetTop(details, secondary.Top);
         guide.Place(target, CaptureOverlay.GuidanceRadius(ActualWidth, ActualHeight, target, primary, secondary));
         PlaceFeedback(target, snapshot.Pose, new(primary.Left, primary.Top, primary.Width, primary.Height),
             new(secondary.Left, secondary.Top, secondary.Width, secondary.Height));
@@ -175,8 +215,10 @@ public sealed class CaptureView : Grid
                         Math.Clamp(top, 4, Math.Max(4, ActualHeight - height - 4)), width, height));
             }
             feedbackBounds = candidates.FirstOrDefault(Clear, candidates[0]);
-            feedbackAnchor = target; feedbackPose = requestedPose;
+            feedbackAnchor = target;
+            feedbackPose = requestedPose;
         }
-        Canvas.SetLeft(feedback, feedbackBounds.Left); Canvas.SetTop(feedback, feedbackBounds.Top);
+        Canvas.SetLeft(feedback, feedbackBounds.Left);
+        Canvas.SetTop(feedback, feedbackBounds.Top);
     }
 }

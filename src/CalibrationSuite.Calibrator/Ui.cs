@@ -13,15 +13,34 @@ internal static class Ui
     public static readonly Brush Error = Brush("#A53228");
     public static Brush Brush(string color)
     {
-        if (brushes.TryGetValue(color, out var cached)) return cached;
+        if (brushes.TryGetValue(color, out var cached))
+            return cached;
         var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
-        brush.Freeze(); brushes.Add(color, brush); return brush;
+        brush.Freeze();
+        brushes.Add(color, brush);
+        return brush;
     }
     public static TextBlock Text(string text = "", double size = 14, Brush? color = null) => new()
-    { Text = text, FontSize = size, Foreground = color ?? Ink, TextWrapping = TextWrapping.Wrap };
+    {
+        Text = text,
+        FontSize = size,
+        Foreground = color ?? Ink,
+        TextWrapping = TextWrapping.Wrap
+    };
     public static TextBlock Heading(string text, double size = 16)
-    { var value = Text(text, size); value.FontWeight = FontWeights.SemiBold; return value; }
+    {
+        var value = Text(text, size);
+        value.FontWeight = FontWeights.SemiBold;
+        return value;
+    }
     public static Border Card(UIElement content) => new()
-    { Background = Brushes.White, BorderBrush = Brush("#DFE5EE"), BorderThickness = new(1), CornerRadius = new(10), Padding = new(14), Child = content };
+    {
+        Background = Brushes.White,
+        BorderBrush = Brush("#DFE5EE"),
+        BorderThickness = new(1),
+        CornerRadius = new(10),
+        Padding = new(14),
+        Child = content
+    };
     public static void Primary(Button button) => button.SetResourceReference(FrameworkElement.StyleProperty, "PrimaryButton");
 }

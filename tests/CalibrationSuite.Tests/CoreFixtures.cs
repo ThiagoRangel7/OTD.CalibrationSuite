@@ -16,10 +16,12 @@ internal static class CoreFixtures
         double[]? rows = null, double[]? columns = null)
     {
         error ??= (_, _) => new(2, 3);
-        rows ??= [150, 850]; columns ??= [150, 850];
+        rows ??= [150, 850];
+        columns ??= [150, 850];
         return new()
         {
-            Mode = "measured", SourceGeometry = Geometry,
+            Mode = "measured",
+            SourceGeometry = Geometry,
             Grid = new(rows, columns),
             Nodes = rows.Select(y => columns.Select(x =>
                 new CalibrationNode(Samples(new(x, y), t => error(new(x, y), t)))).ToArray()).ToArray()

@@ -35,7 +35,10 @@ public sealed class AcquisitionSession
             || this.options.RpcTimeoutMilliseconds <= 0)
             throw new ArgumentOutOfRangeException(nameof(options));
         queue = Channel.CreateBounded<(DebugReportData, long)>(new BoundedChannelOptions(this.options.Capacity)
-        { SingleReader = true, FullMode = BoundedChannelFullMode.Wait });
+        {
+            SingleReader = true,
+            FullMode = BoundedChannelFullMode.Wait
+        });
     }
 
     public void Cancel(string message = "Capture stopped. Unfinished measurements are available for review or resume.")
@@ -48,7 +51,8 @@ public sealed class AcquisitionSession
 
     private void OnReport(object? sender, DebugReportData report)
     {
-        if (stop.IsCancellationRequested) return;
+        if (stop.IsCancellationRequested)
+            return;
         // Timestamp at ingress, before filtering/reconstruction. No hardware timing is available.
         if (!queue.Writer.TryWrite((report, Stopwatch.GetTimestamp())))
             Cancel("Report queue overflow. Acquisition cancelled; retry after reducing system load.");
@@ -59,7 +63,8 @@ public sealed class AcquisitionSession
 
     private async Task<string> RunCoreAsync()
     {
-        if (Interlocked.Exchange(ref started, 1) != 0) throw new InvalidOperationException("Session already started.");
+        if (Interlocked.Exchange(ref started, 1) != 0)
+            throw new InvalidOperationException("Session already started.");
         daemon.DeviceReport += OnReport;
         daemon.Invalidated += OnInvalidated;
         Task? enable = null;
@@ -87,8 +92,10 @@ public sealed class AcquisitionSession
             daemon.DeviceReport -= OnReport;
             daemon.Invalidated -= OnInvalidated;
             queue.Writer.TryComplete();
-            if (enable != null) await ConfirmDebugDisabledAsync(enable);
-            if (worker != null) await WaitForConsumerAsync(worker);
+            if (enable != null)
+                await ConfirmDebugDisabledAsync(enable);
+            if (worker != null)
+                await WaitForConsumerAsync(worker);
         }
         return reason ?? "Acquisition ended.";
     }
@@ -100,7 +107,10 @@ public sealed class AcquisitionSession
     {
         // One ordered cleanup task also handles an enable reply arriving after timeout.
         var cleanup = DisableAfterEnableAsync(enable);
-        try { await cleanup.WaitAsync(RpcTimeout); }
+        try
+        {
+            await cleanup.WaitAsync(RpcTimeout);
+        }
         catch (Exception ex)
         {
             RestartRequired = true;
@@ -111,7 +121,10 @@ public sealed class AcquisitionSession
 
     private async Task WaitForConsumerAsync(Task worker)
     {
-        try { await worker.WaitAsync(TimeSpan.FromMilliseconds(200)); }
+        try
+        {
+            await worker.WaitAsync(TimeSpan.FromMilliseconds(200));
+        }
         catch (TimeoutException)
         {
             RestartRequired = true;
@@ -124,7 +137,11 @@ public sealed class AcquisitionSession
     private static async Task ObserveAsync(Task task)
     {
         // The session has already reported the failure/timeout; observe any late exception.
-        try { await task.ConfigureAwait(false); } catch { }
+        try
+        {
+            await task.ConfigureAwait(false);
+        }
+        catch { }
     }
 
     private async Task DisableAfterEnableAsync(Task enable)
@@ -145,7 +162,8 @@ public sealed class AcquisitionSession
             {
                 var reading = reconstruct(item.Data, item.Timestamp);
                 stop.Token.ThrowIfCancellationRequested();
-                if (reading.Kind != ReadingKind.Auxiliary) Volatile.Write(ref latest, reading);
+                if (reading.Kind != ReadingKind.Auxiliary)
+                    Volatile.Write(ref latest, reading);
                 Reading?.Invoke(reading);
             }
             // Waiting for the next report is ordinary pen absence, not a stalled parser.

@@ -1,62 +1,54 @@
-# Current scope and release preparation
+# Release preparation
 
-This is the current delivery checklist. Earlier milestone notes describe historical physical-angle guidance and its restrictions, superseded by the 2026-10-12 reported-coordinate workflow.
+The project is unreleased. Local candidates are ready for final device workflow review; publication still requires explicit authorization.
 
-## Supported scope
+## Scope
 
-- Windows x64 Calibrator and OpenTabletDriver 0.6.7.
-- One display tablet, with full active digitizer mapped to the full display, X right and Y down.
-- OTD absolute pen-position reports, with optional paired tilt. No tablet-model/parser whitelist.
-- When the first eligible pen report lacks ITiltReport, tilt poses are blocked for the session and the screen instructs upright position-only capture. Users can choose this mode themselves by setting directions or levels to zero if reported tilt is unusable.
-- Rotated/cropped/misaligned mappings and non-display tablets are outside scope. OTD does not expose a reliable display-tablet classification; the user is responsible for the physical setup.
+Windows x64 Calibrator, OTD 0.6.7, and one display tablet with aligned full-digitizer/full-screen mapping. Absolute pen position is required; paired tilt is optional. Guidance uses reported coordinates, and position-only capture asks the user to hold upright without verifying posture. [README](../README.md) covers setup and use.
 
-Tilt support derives from OTD report interfaces; its tablet metadata has no reliable capability flag. There are no model-specific settings or catalogs. Zero values alone do not imply missing support. Position-only users hold upright at every crosshair; without tilt measurements, that posture cannot be verified.
+Common OTD interfaces do not establish broad hardware accuracy. Check reachable targets, stable sampling, usable coverage, and actual correction on each supported setup. Physical-angle certification is not a release gate.
 
-Tilt targets use the reported coordinates, not physical angles. The first stable pose at each grid point sets its reference; later targets spread around it. Exact perpendicularity, angular scale, and raw-zero inclusion are not release gates. Distinct measurements, usable triangulation, stable sampling, and actual spatial/tilt coverage still matter. Reduce Tilt range if targets are unreachable. No-tilt data provides spatial correction; it cannot compensate for orientation-dependent error that the tablet does not report.
-
-## Prepare the files
-
-From the repository root, with the pinned SDK and restored locked dependencies:
+## Prepare archives
 
 ```powershell
 dotnet restore CalibrationSuite.slnx --locked-mode
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/Package-Release.ps1
 ```
 
-The version in packaging/metadata.json determines artifacts/releases/0.1.0.0:
+`packaging/metadata.json` sets the version and output directory, currently `artifacts/releases/0.1.0.0`.
 
-| File | Purpose |
+| Output | Contents |
 | --- | --- |
-| CalibrationSuite.zip | OTD Plugin Manager package; DLLs and MIT/NTS licenses at ZIP root |
-| CalibrationSuite.Calibrator.Windows.zip | Windows x64 app and its complete runtime dependency/notices folder; requires .NET 8 Windows Desktop Runtime |
-| CalibrationSuite.Source.zip | Actual working-tree source/build inputs, plus the exact upstream OTD source archive |
-| CalibrationSuite.json | Prepared OTD registry metadata with versioned download URL and actual plugin ZIP SHA-256 |
-| SHA256SUMS.txt | Checksums of all three archives |
+| `CalibrationSuite.zip` | Filter/Core/NTS DLLs, metadata, and licenses at ZIP root |
+| `CalibrationSuite.Calibrator.Windows.zip` | Complete Windows x64 app and notices; requires .NET 8 Windows Desktop runtime |
+| `CalibrationSuite.Source.zip` | Working-tree source/build inputs and exact upstream source ZIP |
+| `CalibrationSuite.json` | Registry metadata with versioned download URL and actual filter ZIP hash |
+| `SHA256SUMS.txt` | Checksums of all three archives |
 
-The script does not install, publish, create a tag/release, or modify OTD settings. The prepared download URL becomes valid only after the exact ZIP is uploaded under the matching v0.1.0.0 GitHub release. Registry metadata belongs outside the ZIP to avoid a self-referential checksum. The package identity is CalibrationSuite, matching the ZIP filename so OTD's manual and registry installers use the same folder; the filter's human-readable name remains Calibration Suite.
+Packaging does not install, publish, create a tag, or change OTD settings. The generated download URL works only after uploading the exact ZIP to the matching versioned release. Registry metadata stays outside the ZIP to avoid a self-referential hash. Package identity and stable ZIP filename are `CalibrationSuite`; the displayed filter name is **Calibration Suite**.
 
-Source recipients can build using the pinned inputs. For offline OTD source preparation, copy third-party/OpenTabletDriver-source.zip from the source archive to artifacts/otd-736003ed72c8bbb28033b039d5a0bb76c344145c.zip before building. NuGet dependencies and the SDK remain prerequisites. OTD DLLs are separate, allowing compatible modified builds to replace them. Calibration Suite is MIT; OTD-derived inputs/binaries retain LGPL, including its incorporated GPL text. Package notices retain dependency copyright, declared license, exact repository revision where supplied, and bundled NOTICE/LICENSE files.
+For offline source preparation, copy `third-party/OpenTabletDriver-source.zip` from the source archive to `artifacts/otd-<commit>.zip`, using the commit in `dependencies/otd/source.json`. SDK and NuGet dependencies are still required. OTD DLLs remain separate so compatible modified builds can replace them. Retain MIT, LGPL/GPL, and all dependency notices/source inputs.
 
-## Verification
+## Automated checks
 
-Automated checks cover capture/copy/runtime correction with and without tilt, offset reference/coverage that excludes raw zero, no stale-tilt reuse, report-field preservation, invalid-data identity fallback, and pipeline ordering. OTD's actual Plugin Manager is exercised for installation, replacement of obsolete files during update, and removal. Full Settings serialization covers measured calibration data, destination-profile isolation, retained data when bypassed, backup/restore, and clear-to-identity. Tests use temporary app-data directories and synthetic reports; they do not alter the installed daemon.
+Require clean locked restores, warning-free Debug/Release builds, and passing synthetic tests. Tests cover capture/copy/correction with and without tilt, nonzero references, invalid-data identity fallback, report preservation/order, and actual OTD Plugin Manager install/update/removal in temporary data directories. Settings serialization covers destination-profile isolation, Save/backup/restore, bypass retention, and clear-to-identity.
 
-WPF checks cover the reported-coordinate circle against the sampling gate, reference/position-only states, all directions, normal/small/high-DPI layouts, reused views, keyboard capture and mouse/touch suppression. Dependency restore and Debug/Release builds must remain warning-free. Release candidates must contain their documented files and matching hashes.
+Run the [visual checker](../README.md#development-checks) for normal/small/high-DPI layouts, all directions/cues, tolerance-circle gates, reused views, and keyboard/mouse/touch handling. Inspect the renders. Confirm archive contents and checksums. These checks do not mutate the installed daemon or establish physical accuracy.
 
-## Final user workflow check
+## Final device check
 
-1. Install the candidate filter ZIP through OTD Plugin Manager and restart OTD. Extract the complete Calibrator ZIP into a fresh directory and launch the executable. Verify connection and the documented mapping.
-2. Capture a small 2 × 2 position-only dataset, accept/copy it, paste into the intended profile, and Save. Compare enabled/bypassed pointer behavior at captured and intermediate positions. Reopen/restart OTD and verify the data remains present. Save a settings backup/preset, clear the data, then restore it.
-3. On a tilt-capable tablet, repeat a small tilt capture using reported-coordinate targets, including a nonzero reference if that is the comfortable pose. Check that targets can be reached, bursts remain responsive during contact, and correction/bypass behaves consistently between sampled tilts and near coverage boundaries. A physical angle reference or accuracy threshold is not required.
+1. Install the candidate filter through Plugin Manager and restart OTD. Extract the complete Calibrator ZIP into a fresh directory, launch it, and verify connection/full-screen placement.
+2. Capture a 2 × 2 position-only dataset. Exercise retry, Backspace, restart, Esc/resume, review, pose/node recapture, discard, accept, and copy. Confirm earlier accepted data survives unfinished or discarded work.
+3. Paste into the intended profile and Save. Compare enabled/bypassed correction at captured and intermediate positions. Restart OTD, confirm persistence, then test settings/preset backup, clear, and restore. Check the Calibrator close reminder before and after copying.
+4. On a tilt-capable tablet, repeat with reported-coordinate targets, including a comfortable nonzero reference. Check reachable targets, contact responsiveness, and correction between sampled tilts and near coverage boundaries. Verify pen/mouse/touch cannot activate capture controls.
+5. Check disconnect and display/DPI-change recovery. Review broader monitor configurations where available; changed digitizer geometry requires new capture.
 
-These are functional checks of the new workflow, not physical-angle certification. Broad hardware accuracy has not been established merely by using common interfaces. Publish support claims according to actual report compatibility and observed device behavior.
+Record observed behavior and limitations; no invented accuracy threshold is required. Calibrator updates use a fresh extraction directory; removal deletes that directory. Filter update/removal stays in OTD Plugin Manager, and saved data stays in OTD.
 
-After the user workflow check, commit the reviewed changes, create the versioned release with all three ZIPs and checksums, and submit its generated metadata to OpenTabletDriver/Plugin-Repository under the documented driver/owner/repository path. Publishing requires explicit user authorization. A public source repository alone is not an OTD Plugin Manager listing or binary release.
+After device review and publication authorization, commit the reviewed source, create the versioned release with all archives/checksums, and submit generated metadata to `OpenTabletDriver/Plugin-Repository`. A public repository alone is not a binary release or registry listing.
 
-## Recorded verification — 2026-10-12
+## Verification record
 
-Debug and Release solution builds passed with zero warnings/errors. Both configurations passed 177 non-live tests, including actual OTD install/update/removal, Settings backup/restore contracts, and blocked tilt poses after detecting position-only reports. WPF circle/gate, reference/position-only instructions, layout, crosshair feedback, and input checks passed; renders were visually inspected. The optional guidance metadata in earlier measured data remains loadable. Locked dependency restore passed; the transitive vulnerability audit reports no known vulnerable packages after the MessagePack 2.5.301 patch.
+Before this simplification, the 2026-10-12 Debug/Release builds passed without warnings/errors and each passed 177 non-live tests. WPF/input checks, locked restore, and the transitive dependency audit also passed. This pass retains those behavioral checks; current results are recorded in [optimization notes](OPTIMIZATION.md#readability-pass).
 
-Production C# decreased from 2,227 to 2,173 lines and from 21,015 to 20,279 syntax tokens; function/constructor declarations decreased from 159 to 149. This reduction removes the physical-angle projection, annular-sector model/rendering, and origin/upright constraints rather than compressing formatting. Runtime correction remains allocation-free in the existing performance check. Tests for superseded physical-angle behavior were replaced with reported-coordinate, nonzero-reference, no-tilt, and delivery checks.
-
-The archives are local release candidates. The final on-device workflow check and explicit publication remain pending; no new measured hardware accuracy is claimed.
+Final device review and publication remain pending.

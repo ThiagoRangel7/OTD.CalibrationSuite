@@ -19,14 +19,28 @@ public sealed class CaptureWindow : Window
     {
         this.acquisition = acquisition;
         this.capture = capture;
-        SetResourceReference(StyleProperty, typeof(Window)); Background = Ui.Brush("#101A28");
-        Title = "Calibration Suite — capture"; WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize;
-        view = new(draft.Settings, draft.Geometry, tabletName); Content = view;
-        PreviewMouseDown += Ignore; PreviewMouseUp += Ignore; PreviewMouseMove += Ignore; PreviewMouseWheel += Ignore;
-        PreviewStylusDown += Ignore; PreviewStylusUp += Ignore; PreviewStylusMove += Ignore; PreviewStylusSystemGesture += Ignore;
-        PreviewTouchDown += Ignore; PreviewTouchUp += Ignore; PreviewTouchMove += Ignore;
-        Stylus.SetIsPressAndHoldEnabled(this, false); Stylus.SetIsFlicksEnabled(this, false);
-        Stylus.SetIsTapFeedbackEnabled(this, false); Stylus.SetIsTouchFeedbackEnabled(this, false);
+        SetResourceReference(StyleProperty, typeof(Window));
+        Background = Ui.Brush("#101A28");
+        Title = "Calibration Suite — capture";
+        WindowStyle = WindowStyle.None;
+        ResizeMode = ResizeMode.NoResize;
+        view = new(draft.Settings, draft.Geometry, tabletName);
+        Content = view;
+        PreviewMouseDown += Ignore;
+        PreviewMouseUp += Ignore;
+        PreviewMouseMove += Ignore;
+        PreviewMouseWheel += Ignore;
+        PreviewStylusDown += Ignore;
+        PreviewStylusUp += Ignore;
+        PreviewStylusMove += Ignore;
+        PreviewStylusSystemGesture += Ignore;
+        PreviewTouchDown += Ignore;
+        PreviewTouchUp += Ignore;
+        PreviewTouchMove += Ignore;
+        Stylus.SetIsPressAndHoldEnabled(this, false);
+        Stylus.SetIsFlicksEnabled(this, false);
+        Stylus.SetIsTapFeedbackEnabled(this, false);
+        Stylus.SetIsTouchFeedbackEnabled(this, false);
         DpiChanged += (_, _) => { if (positioned) Dispatcher.BeginInvoke(() => GeometryChanged?.Invoke()); };
         SourceInitialized += (_, _) => display.Place(this);
         ContentRendered += (_, _) => { display.Place(this); positioned = true; Render(); timer.Start(); Activate(); Focus(); };
@@ -36,13 +50,22 @@ public sealed class CaptureWindow : Window
         PreviewKeyDown += (_, e) =>
         {
             e.Handled = true;
-            if (e.IsRepeat) return;
+            if (e.IsRepeat)
+                return;
             switch (e.Key)
             {
-                case Key.Escape: Close(); return;
-                case Key.Space: capture.Start(CaptureController.Now); break;
-                case Key.Back: capture.Previous(); break;
-                case Key.R: capture.Restart(); break;
+                case Key.Escape:
+                    Close();
+                    return;
+                case Key.Space:
+                    capture.Start(CaptureController.Now);
+                    break;
+                case Key.Back:
+                    capture.Previous();
+                    break;
+                case Key.R:
+                    capture.Restart();
+                    break;
             }
             Render();
         };
@@ -63,7 +86,8 @@ public sealed class CaptureWindow : Window
             Close();
             return;
         }
-        if (!positioned) return;
+        if (!positioned)
+            return;
         view.Update(state, acquisition.Latest, now);
     }
 }

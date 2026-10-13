@@ -26,7 +26,8 @@ public sealed class CalibrationWorkspace
     public void Finish()
     {
         var candidate = Session ?? throw new InvalidOperationException("No unfinished capture.");
-        if (!candidate.Complete) throw new CalibrationException("Capture every requested pose before accepting.");
+        if (!candidate.Complete)
+            throw new CalibrationException("Capture every requested pose before accepting.");
         Candidate = candidate;
         Session = null;
     }

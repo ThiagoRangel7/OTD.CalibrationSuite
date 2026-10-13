@@ -5,7 +5,10 @@ using OpenTabletDriver.Plugin.Tablet;
 
 namespace CalibrationSuite.Otd;
 
-public enum ReadingKind { Paired, Auxiliary, Rejected }
+public enum ReadingKind
+{
+    Paired, Auxiliary, Rejected
+}
 public sealed record ReportReading(long Timestamp, Vector2? Position, Vector2? Tilt, uint? Pressure, string Status,
     ReadingKind Kind = ReadingKind.Paired, string? ReportType = null);
 
@@ -14,7 +17,10 @@ public static class ReportReadingFactory
     public static ReportReading Read(DebugReportData data, long timestamp)
     {
         object report;
-        try { report = data.ToObject(); }
+        try
+        {
+            report = data.ToObject();
+        }
         catch (Exception ex) { throw new InvalidOperationException($"Cannot reconstruct OTD report '{data.Path}'. Check installed parser/plugins and OTD logs: {ex.Message}", ex); }
         if (report is not IDeviceReport deviceReport)
             throw new InvalidOperationException($"Reconstructed '{data.Path}' is not an OTD device report.");

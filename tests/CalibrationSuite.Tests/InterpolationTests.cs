@@ -13,7 +13,8 @@ public class InterpolationTests
         Point2[] tilts = [new(-40, -40), new(-40, 40), new(1, 2), new(40, -40), new(40, 40), new(0, -40)];
         var samples = Samples(target, t => new(t.X * t.X / 10 + 9, t.Y * 2 - 3), tilts);
         var mesh = NodeMesh.Prepare(samples, target);
-        foreach (var sample in samples) Near(sample.Position - target, mesh.Evaluate(sample.Tilt));
+        foreach (var sample in samples)
+            Near(sample.Position - target, mesh.Evaluate(sample.Tilt));
         Near(new(9.1, 1), mesh.Evaluate(new(1, 2)));
     }
 
@@ -60,7 +61,8 @@ public class InterpolationTests
         Point2[] tilts = [.. Tilts, new(-10, 0), new(10, 0), new(0, -40), new(0, 40)];
         var samples = Samples(default, t => new(t.X * t.X + t.Y, t.Y * t.Y - t.X), tilts);
         var mesh = NodeMesh.Prepare(samples, default);
-        foreach (var sample in samples) Near(sample.Position, mesh.Evaluate(sample.Tilt));
+        foreach (var sample in samples)
+            Near(sample.Position, mesh.Evaluate(sample.Tilt));
         Near(new(40, 1600), mesh.Evaluate(new(0, 80)));
     }
 
@@ -160,9 +162,11 @@ public class InterpolationTests
     public void EvaluationHasNoManagedAllocationsAndUnusableInputPassesThrough()
     {
         var prepared = PreparedCalibration.Prepare(Data(), Geometry);
-        for (int i = 0; i < 100; i++) _ = prepared.Correct(new(400, 500), new(90, 12));
+        for (int i = 0; i < 100; i++)
+            _ = prepared.Correct(new(400, 500), new(90, 12));
         long before = GC.GetAllocatedBytesForCurrentThread();
-        for (int i = 0; i < 1000; i++) _ = prepared.Correct(new(400, 500), new(i % 80, 12));
+        for (int i = 0; i < 1000; i++)
+            _ = prepared.Correct(new(400, 500), new(i % 80, 12));
         Assert.Equal(0, GC.GetAllocatedBytesForCurrentThread() - before);
         Assert.Equal(new Point2(400, 500), prepared.Correct(new(400, 500), new(double.NaN, 12)));
     }
